@@ -48,6 +48,7 @@ label { color: #c9c1b3; font-size: 0.85rem; font-weight: 650; }
 .player-card { padding: 1.2rem 0; border-top: 1px solid #464035; }
 .player-card h2 { margin: 0; font-family: Georgia, serif; font-size: 1.5rem; font-weight: 500; }
 .player-meta { color: #958c7e; font-size: 0.78rem; }
+.agent-meta { overflow-wrap: anywhere; margin: -0.2rem 0 0; color: #b8d57b; font-size: 0.68rem; line-height: 1.4; }
 .captured-pieces { min-height: 2.7rem; margin-top: 0.8rem; }
 .captured-pieces > span { display: block; margin-bottom: 0.2rem; color: #756d60; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
 .captured-pieces > div { display: flex; flex-wrap: wrap; min-height: 1.55rem; }

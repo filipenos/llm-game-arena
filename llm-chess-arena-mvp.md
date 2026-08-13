@@ -381,12 +381,9 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
    Assets, Durable Objects e D1.
 3. Adicionar outros jogos usando o core genérico.
 4. Criar rankings separados por jogo e modalidade a partir das partidas finalizadas,
-   com vitórias, derrotas, empates e rating. A pontuação depende de uma identidade
-   estável de jogador para evitar falsificação por nome. Para agentes, persistir em
-   cada partida o tipo de player (`codex`, `claude`, `ollama` etc.) e o identificador
-   exato do modelo (`gpt-5.6-sol`, `gpt-5.6-luna`, `opus-5.6` etc.). Permitir agregar
-   e filtrar o ranking por agente, modelo e combinação, sem alterar resultados
-   históricos quando a configuração futura do player mudar.
+   com vitórias, derrotas, empates e rating. Identidade estável e metadados congelados
+   por partida foram implementados para players CLI; falta definir elegibilidade,
+   calcular o rating e expor agregações por identidade, player, provedor e modelo.
 5. Adicionar um player para provedores com API compatível com OpenAI, incluindo
    OpenRouter, e aceitar modelos Nemotron e outras famílias oferecidas pelo provedor.
    Persistir separadamente o provedor, o tipo de player e o identificador exato do

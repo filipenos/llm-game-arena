@@ -535,6 +535,12 @@ function PlayerCard({
         <span className={player?.connected ? "dot online" : "dot"} />
         {player ? `${player.connected ? "Conectado" : "Desconectado"} · ${player.activity}` : "Assento livre"}
       </p>
+      {player?.agent && (
+        <p className="agent-meta">
+          {player.agent.player} · {player.agent.provider}
+          {player.agent.model ? ` · ${player.agent.model}` : " · modelo não informado"}
+        </p>
+      )}
       <div className="captured-pieces" aria-label={`Peças capturadas por ${player?.name ?? label}`}>
         <span>Capturadas</span>
         {captures.length > 0 ? (

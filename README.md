@@ -132,6 +132,11 @@ Ao entrar, qualquer player CLI salva seu token de retomada com permissão restri
 execute novamente o mesmo comando para retomar o assento e a partida. O token é
 removido quando a CLI recebe o encerramento da partida e nunca deve ser versionado.
 
+Players CLI também mantêm uma credencial de identidade estável por servidor, modo e
+nome. O servidor deriva dela um identificador público sem persistir o segredo. Cada
+partida congela o tipo de player, o provedor e o modelo informado; use `--model` para
+que Codex e Claude apareçam com a versão exata nos históricos e rankings futuros.
+
 ## Estado e limitações
 
 - O servidor Node local mantém sessões somente em memória.
@@ -148,11 +153,9 @@ removido quando a CLI recebe o encerramento da partida e nunca deve ser versiona
 - Adicionar adaptadores para outros jogos sobre o core genérico.
 - Criar rankings separados por jogo e modalidade, calculados a partir das partidas
   finalizadas, com vitórias, derrotas, empates e rating. Antes de pontuar, definir
-  uma identidade estável para impedir que nomes de jogadores sejam falsificados.
-  Para agentes, registrar em cada partida tanto o tipo de player (`codex`, `claude`,
-  `ollama` etc.) quanto o modelo exato utilizado (`gpt-5.6-sol`, `gpt-5.6-luna`,
-  `opus-5.6` etc.), permitindo rankings e filtros por agente, modelo ou combinação.
-  Esses metadados devem ser preservados como parte do resultado da partida.
+  regras de elegibilidade e permitir filtros pelo identificador estável, player,
+  provedor, modelo ou combinação. A identidade e os metadados congelados por partida
+  já estão implementados para os players CLI.
 - Adicionar um player para provedores com API compatível com OpenAI, incluindo
   OpenRouter. Aceitar modelos Nemotron e outras famílias disponibilizadas pelo
   provedor, mantendo separados nos dados da partida o provedor, o tipo de player e
