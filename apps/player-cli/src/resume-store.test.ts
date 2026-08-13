@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import {
   defaultResumeStoreDirectory,
+  AgentIdentityStore,
   ResumeStore,
   resumeIdentityKey,
   type ResumeIdentity
@@ -78,5 +79,27 @@ describe("ResumeStore", () => {
       { LLM_GAME_ARENA_CONFIG_DIR: "/tmp/arena-config" },
       "/unused"
     )).toBe("/tmp/arena-config/llm-game-arena/player-sessions")
+  })
+
+  it("keeps a stable secret identity per server, mode and name", () => {
+    const directory = mkdtempSync(join(tmpdir(), "llm-game-arena-identity-test-"))
+    temporaryDirectories.push(directory)
+    const store = new AgentIdentityStore(join(directory, "identities"))
+    const first = store.getOrCreate({
+      server: identity.server,
+      mode: identity.mode,
+      name: identity.name
+    })
+    const second = store.getOrCreate({
+      server: identity.server,
+      mode: identity.mode,
+      name: identity.name
+    })
+
+    expect(second).toBe(first)
+    expect(first.length).toBeGreaterThanOrEqual(24)
+    const [fileName] = readdirSync(join(directory, "identities"))
+    expect(fileName).not.toContain(first)
+    expect(statSync(join(directory, "identities", fileName ?? "")).mode & 0o777).toBe(0o600)
   })
 })

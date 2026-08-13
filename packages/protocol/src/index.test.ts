@@ -21,6 +21,10 @@ describe("parseClientEvent", () => {
     ["player without identity", {
       type: "connection.join", sessionId: "K7P4QX", role: "player"
     }],
+    ["agent without stable identity metadata", {
+      type: "connection.join", sessionId: "K7P4QX", role: "player",
+      name: "Codex", participantType: "agent"
+    }],
     ["invalid square", {
       type: "move.play", requestId: "move", expectedPly: 0, from: "z9", to: "e4"
     }],
@@ -33,5 +37,20 @@ describe("parseClientEvent", () => {
     }]
   ])("rejects %s", (_description, event) => {
     expect(() => parseClientEvent(event)).toThrow()
+  })
+
+  it("accepts a stable agent identity and model metadata", () => {
+    expect(parseClientEvent({
+      type: "connection.join",
+      sessionId: "K7P4QX",
+      role: "player",
+      name: "Codex",
+      participantType: "agent",
+      identityToken: "stable-secret-identity-token-for-codex",
+      agent: { player: "codex", provider: "openai", model: "gpt-5.6-sol" }
+    })).toMatchObject({
+      identityToken: "stable-secret-identity-token-for-codex",
+      agent: { player: "codex", provider: "openai", model: "gpt-5.6-sol" }
+    })
   })
 })

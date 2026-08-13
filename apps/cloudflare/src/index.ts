@@ -1,7 +1,12 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { DurableObject } from "cloudflare:workers"
-import { parseClientEvent, sessionIdSchema, type ServerEvent } from "@llm-chess/protocol"
+import {
+  parseClientEvent,
+  sessionIdSchema,
+  type AgentMetadata,
+  type ServerEvent
+} from "@llm-chess/protocol"
 import {
   ArenaService,
   type ConnectionBinding,
@@ -34,6 +39,14 @@ interface SessionIndexRow {
   status: string
   white_name: string | null
   black_name: string | null
+  white_identity_id: string | null
+  white_player: AgentMetadata["player"] | null
+  white_provider: string | null
+  white_model: string | null
+  black_identity_id: string | null
+  black_player: AgentMetadata["player"] | null
+  black_provider: string | null
+  black_model: string | null
   winner: string | null
   finish_reason: string | null
   ply: number
@@ -113,7 +126,9 @@ async function listSessions(request: Request, env: Env): Promise<Response> {
   const requestedLimit = Number(url.searchParams.get("limit") ?? 50)
   const limit = Math.min(Math.max(Number.isInteger(requestedLimit) ? requestedLimit : 50, 1), 100)
   const result = await env.DB.prepare(
-    `SELECT id, game_type, status, white_name, black_name, winner, finish_reason,
+    `SELECT id, game_type, status, white_name, black_name,
+      white_identity_id, white_player, white_provider, white_model,
+      black_identity_id, black_player, black_provider, black_model, winner, finish_reason,
       ply, created_at, updated_at
     FROM sessions WHERE status = ? ORDER BY updated_at DESC LIMIT ?`
   ).bind(status, limit).all<SessionIndexRow>()
@@ -124,6 +139,18 @@ async function listSessions(request: Request, env: Env): Promise<Response> {
       status: row.status,
       whiteName: row.white_name,
       blackName: row.black_name,
+      whiteIdentityId: row.white_identity_id,
+      blackIdentityId: row.black_identity_id,
+      whiteAgent: row.white_player && row.white_provider ? {
+        player: row.white_player,
+        provider: row.white_provider,
+        ...(row.white_model ? { model: row.white_model } : {})
+      } : null,
+      blackAgent: row.black_player && row.black_provider ? {
+        player: row.black_player,
+        provider: row.black_provider,
+        ...(row.black_model ? { model: row.black_model } : {})
+      } : null,
       winner: row.winner,
       finishReason: row.finish_reason,
       ply: row.ply,
@@ -350,12 +377,23 @@ export class SessionDurableObject extends DurableObject<Env> {
     try {
       await this.env.DB.prepare(
         `INSERT INTO sessions (
-          id, game_type, status, white_name, black_name, winner, finish_reason, ply, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          id, game_type, status, white_name, black_name,
+          white_identity_id, white_player, white_provider, white_model,
+          black_identity_id, black_player, black_provider, black_model,
+          winner, finish_reason, ply, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO UPDATE SET
           status = excluded.status,
           white_name = excluded.white_name,
           black_name = excluded.black_name,
+          white_identity_id = excluded.white_identity_id,
+          white_player = excluded.white_player,
+          white_provider = excluded.white_provider,
+          white_model = excluded.white_model,
+          black_identity_id = excluded.black_identity_id,
+          black_player = excluded.black_player,
+          black_provider = excluded.black_provider,
+          black_model = excluded.black_model,
           winner = excluded.winner,
           finish_reason = excluded.finish_reason,
           ply = excluded.ply,
@@ -366,6 +404,14 @@ export class SessionDurableObject extends DurableObject<Env> {
         this.session.status,
         this.session.white?.name ?? null,
         this.session.black?.name ?? null,
+        this.session.white?.identityId ?? null,
+        this.session.white?.agent?.player ?? null,
+        this.session.white?.agent?.provider ?? null,
+        this.session.white?.agent?.model ?? null,
+        this.session.black?.identityId ?? null,
+        this.session.black?.agent?.player ?? null,
+        this.session.black?.agent?.provider ?? null,
+        this.session.black?.agent?.model ?? null,
         snapshot.game?.result?.winner ?? null,
         snapshot.game?.result?.reason ?? null,
         snapshot.game?.ply ?? 0

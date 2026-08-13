@@ -42,6 +42,28 @@ describe("SessionManager", () => {
     })).toThrowError(DomainError)
   })
 
+  it("derives a stable public identity without persisting the secret", () => {
+    const manager = new SessionManager()
+    const session = manager.createSession()
+    const identityToken = "stable-secret-identity-token-for-codex"
+    const participant = manager.joinPlayer(session.id, {
+      connectionId: "codex",
+      name: "Codex",
+      type: "agent",
+      identityToken,
+      agent: { player: "codex", provider: "openai", model: "gpt-5.6-sol" }
+    }).participant
+    const persisted = manager.persistable(session)
+
+    expect(participant.identityId).toMatch(/^agent_[a-f0-9]{64}$/)
+    expect(manager.snapshot(session).session.white ?? manager.snapshot(session).session.black)
+      .toMatchObject({
+        identityId: participant.identityId,
+        agent: { player: "codex", provider: "openai", model: "gpt-5.6-sol" }
+      })
+    expect(JSON.stringify(persisted)).not.toContain(identityToken)
+  })
+
   it("assigns a random free seat and then the remaining seat", () => {
     const manager = new SessionManager()
     const session = manager.createSession()

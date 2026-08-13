@@ -1,10 +1,11 @@
-import { randomBytes, randomUUID } from "node:crypto"
+import { createHash, randomBytes, randomUUID } from "node:crypto"
 import {
   chessGameDefinition,
   type ChessGameContract
 } from "@llm-chess/chess"
 import type {
   Color,
+  AgentMetadata,
   GameResult,
   MoveCommand,
   ParticipantType,
@@ -26,6 +27,8 @@ export interface ParticipantRecord {
   activity: PlayerActivity
   resumeToken: string
   connectionId?: string
+  identityId?: string
+  agent?: AgentMetadata
 }
 
 export interface SessionRecord {
@@ -49,6 +52,8 @@ export interface PersistedParticipant {
   ready: boolean
   activity: PlayerActivity
   resumeToken: string
+  identityId?: string
+  agent?: AgentMetadata
 }
 
 export interface PersistedSession {
@@ -73,6 +78,8 @@ export interface JoinPlayerInput {
   type?: ParticipantType
   requestedColor?: Color
   resumeToken?: string
+  identityToken?: string
+  agent?: AgentMetadata
 }
 
 export interface JoinPlayerResult {
@@ -82,6 +89,10 @@ export interface JoinPlayerResult {
 
 function secureToken(): string {
   return Buffer.from(randomBytes(32)).toString("base64url")
+}
+
+function agentIdentityId(identityToken: string): string {
+  return `agent_${createHash("sha256").update(identityToken).digest("hex")}`
 }
 
 export class SessionManager {
@@ -220,6 +231,10 @@ export class SessionManager {
       ready: false,
       activity: "idle",
       resumeToken: secureToken(),
+      ...(input.type === "agent" && input.identityToken && input.agent ? {
+        identityId: agentIdentityId(input.identityToken),
+        agent: { ...input.agent }
+      } : {}),
       connectionId: input.connectionId
     }
     this.setSeat(session, color, participant)
@@ -355,7 +370,9 @@ export class SessionManager {
       color: participant.color,
       connected: participant.connected,
       ready: participant.ready,
-      activity: participant.activity
+      activity: participant.activity,
+      ...(participant.identityId ? { identityId: participant.identityId } : {}),
+      ...(participant.agent ? { agent: { ...participant.agent } } : {})
     }
   }
 
@@ -367,7 +384,9 @@ export class SessionManager {
       color: participant.color,
       ready: participant.ready,
       activity: participant.activity,
-      resumeToken: participant.resumeToken
+      resumeToken: participant.resumeToken,
+      ...(participant.identityId ? { identityId: participant.identityId } : {}),
+      ...(participant.agent ? { agent: { ...participant.agent } } : {})
     }
   }
 

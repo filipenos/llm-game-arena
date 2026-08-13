@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { PlayerClient } from "@llm-chess/player-sdk"
-import type { Color, ServerEvent } from "@llm-chess/protocol"
+import type { AgentMetadata, Color, ServerEvent } from "@llm-chess/protocol"
 import {
   createClaudePlayer,
   createCodexPlayer,
   createOllamaPlayer,
   randomMove
 } from "./agents.js"
-import { ResumeStore, type ResumeIdentity } from "./resume-store.js"
+import { AgentIdentityStore, ResumeStore, type ResumeIdentity } from "./resume-store.js"
 
 interface CliOptions {
   mode: "random" | "ollama" | "codex" | "claude"
@@ -69,6 +69,19 @@ function logEvent(event: ServerEvent): void {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2))
+  const identityToken = new AgentIdentityStore().getOrCreate({
+    server: options.server,
+    mode: options.mode,
+    name: options.name
+  })
+  const agent: AgentMetadata = {
+    player: options.mode,
+    provider: options.mode === "codex" ? "openai"
+      : options.mode === "claude" ? "anthropic"
+        : options.mode === "random" ? "local" : options.mode,
+    ...(options.model ? { model: options.model }
+      : options.mode === "ollama" ? { model: "qwen3:8b" } : {})
+  }
   const resumeStore = new ResumeStore()
   const resumeIdentity: ResumeIdentity = {
     server: options.server,
@@ -84,6 +97,8 @@ async function main(): Promise<void> {
     sessionId: options.sessionId,
     name: options.name,
     type: "agent",
+    identityToken,
+    agent,
     ...(options.color ? { color: options.color } : {}),
     ...(savedSession ? { resumeToken: savedSession.resumeToken } : {})
   })

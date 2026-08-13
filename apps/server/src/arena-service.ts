@@ -148,7 +148,9 @@ export class ArenaService {
           name: event.name,
           type: event.participantType,
           requestedColor: event.requestedColor,
-          resumeToken: event.resumeToken
+          resumeToken: event.resumeToken,
+          identityToken: event.identityToken,
+          agent: event.agent
         })
         this.bindings.set(connectionId, {
           sessionId: session.id,

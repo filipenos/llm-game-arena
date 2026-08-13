@@ -9,12 +9,18 @@ export const promotionSchema = z.enum(["q", "r", "b", "n"])
 export const sessionIdSchema = z.string().regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/)
 export const tokenSchema = z.string().min(24).max(200)
 export const requestIdSchema = z.string().min(1).max(100)
+export const agentMetadataSchema = z.object({
+  player: z.enum(["random", "ollama", "codex", "claude", "openai-compatible"]),
+  provider: z.string().trim().min(1).max(80),
+  model: z.string().trim().min(1).max(160).optional()
+})
 
 export type Color = z.infer<typeof colorSchema>
 export type ParticipantType = z.infer<typeof participantTypeSchema>
 export type SessionStatus = z.infer<typeof sessionStatusSchema>
 export type PlayerActivity = z.infer<typeof activitySchema>
 export type Promotion = z.infer<typeof promotionSchema>
+export type AgentMetadata = z.infer<typeof agentMetadataSchema>
 
 export const moveCommandSchema = z.object({
   from: squareSchema,
@@ -56,6 +62,8 @@ export interface PublicParticipant {
   connected: boolean
   ready: boolean
   activity: PlayerActivity
+  identityId?: string
+  agent?: AgentMetadata
 }
 
 export interface PublicGame {
@@ -86,6 +94,10 @@ export interface SessionSummary {
   status: SessionStatus
   whiteName: string | null
   blackName: string | null
+  whiteIdentityId?: string | null
+  blackIdentityId?: string | null
+  whiteAgent?: AgentMetadata | null
+  blackAgent?: AgentMetadata | null
   winner: Color | null
   finishReason: GameFinishReason | null
   ply: number
@@ -100,12 +112,21 @@ const playerJoinSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   participantType: participantTypeSchema.optional(),
   requestedColor: colorSchema.optional(),
-  resumeToken: tokenSchema.optional()
+  resumeToken: tokenSchema.optional(),
+  identityToken: tokenSchema.optional(),
+  agent: agentMetadataSchema.optional()
 }).superRefine((event, context) => {
   if (!event.resumeToken && (!event.name || !event.participantType)) {
     context.addIssue({
       code: "custom",
       message: "name and participantType are required for a new player"
+    })
+  }
+  if (!event.resumeToken && event.participantType === "agent"
+    && (!event.identityToken || !event.agent)) {
+    context.addIssue({
+      code: "custom",
+      message: "identityToken and agent metadata are required for an agent player"
     })
   }
 })

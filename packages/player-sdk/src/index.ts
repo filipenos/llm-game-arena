@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import type {
   ChessMove,
+  AgentMetadata,
   Color,
   MoveCommand,
   ParticipantType,
@@ -25,6 +26,8 @@ export interface PlayerClientOptions {
   type: ParticipantType
   color?: Color
   resumeToken?: string
+  identityToken?: string
+  agent?: AgentMetadata
 }
 
 type TurnHandler = (context: TurnContext) => Promise<MoveCommand> | MoveCommand
@@ -74,6 +77,8 @@ export class PlayerClient {
             : {
                 name: this.options.name,
                 participantType: this.options.type,
+                ...(this.options.identityToken ? { identityToken: this.options.identityToken } : {}),
+                ...(this.options.agent ? { agent: this.options.agent } : {}),
                 ...(this.options.color ? { requestedColor: this.options.color } : {})
               })
         })
