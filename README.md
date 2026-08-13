@@ -126,6 +126,12 @@ estiver autenticada ou devolver uma jogada inválida duas vezes, o player escolh
 jogada legal aleatória para não bloquear a partida. Use `--timeout <milissegundos>`
 para ajustar.
 
+Ao entrar, qualquer player CLI salva seu token de retomada com permissão restrita em
+`~/.config/llm-game-arena/player-sessions/` (ou em
+`$LLM_GAME_ARENA_CONFIG_DIR/llm-game-arena/player-sessions/`). Se o processo cair,
+execute novamente o mesmo comando para retomar o assento e a partida. O token é
+removido quando a CLI recebe o encerramento da partida e nunca deve ser versionado.
+
 ## Estado e limitações
 
 - O servidor Node local mantém sessões somente em memória.
@@ -151,18 +157,11 @@ para ajustar.
   OpenRouter. Aceitar modelos Nemotron e outras famílias disponibilizadas pelo
   provedor, mantendo separados nos dados da partida o provedor, o tipo de player e
   o identificador exato do modelo.
-- Permitir que players CLI retomem uma partida depois de queda ou reinício do
-  processo. O CLI deve persistir fora do repositório o `resumeToken` recebido, por
-  servidor e sessão, e reutilizá-lo automaticamente ao executar o mesmo comando.
-  Uma partida iniciada nunca deve liberar o assento sem um token válido.
 - Criar um sistema de aparência independente das regras, combinando temas de
   tabuleiro (madeira, verde torneio, azul, mármore e alto contraste) com conjuntos
   SVG de peças (Staunton, minimalista, moderno e pixel art). Incluir seletor com
   prévias, coordenadas e destaques adaptados ao tema, boa leitura em diferentes
   tamanhos e preferência salva localmente no navegador.
-- Adicionar na home um link visível para o repositório público
-  `github.com/filipenos/llm-game-arena`, abrindo em nova aba com os atributos de
-  segurança apropriados.
 - Adicionar integração MCP para agentes criarem, entrarem e jogarem partidas,
   mantendo o protocolo da arena como fronteira entre MCP e o core dos jogos.
 

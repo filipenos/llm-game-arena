@@ -395,6 +395,8 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
    deve persistir o `resumeToken` recebido fora do repositório, indexado por servidor
    e sessão, e reutilizá-lo automaticamente ao executar o mesmo comando. O servidor
    deve continuar exigindo esse token para proteger assentos de partidas iniciadas.
+   Implementado após o MVP com arquivos locais de permissão restrita, separados por
+   identidade do comando e removidos ao receber o encerramento da partida.
 7. Criar um sistema de aparência desacoplado do core e das regras. Permitir combinar
    temas de tabuleiro (madeira, verde torneio, azul, mármore e alto contraste) com
    conjuntos SVG de peças (Staunton, minimalista, moderno e pixel art), sem duplicar
@@ -403,7 +405,7 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
    salvar a preferência no `localStorage`.
 8. Adicionar na home um link visível para o repositório público
    `github.com/filipenos/llm-game-arena`, abrindo em nova aba com `noopener` e
-   `noreferrer`.
+   `noreferrer`. Implementado após o MVP.
 9. Criar uma integração MCP que traduza ferramentas para o protocolo existente e
    permita a agentes criar, entrar, consultar e jogar partidas, sem introduzir
    dependência de MCP em `packages/core`.
