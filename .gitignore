@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.local
+.env.*
+!.env.example
+.codex/
+.claude/
+.agents/
+*.log
+.DS_Store

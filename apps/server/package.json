@@ -1,0 +1,25 @@
+{
+  "name": "@llm-chess/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsup --config tsup.config.ts"
+  },
+  "dependencies": {
+    "@llm-chess/chess": "*",
+    "@llm-chess/core": "*",
+    "@llm-chess/protocol": "*",
+    "cors": "latest",
+    "express": "latest",
+    "ws": "latest"
+  },
+  "devDependencies": {
+    "@types/cors": "latest",
+    "@types/express": "latest",
+    "@types/ws": "latest",
+    "tsup": "latest"
+  }
+}

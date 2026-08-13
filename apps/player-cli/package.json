@@ -1,0 +1,20 @@
+{
+  "name": "@llm-chess/player-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "chess-player": "dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsup --config tsup.config.ts"
+  },
+  "dependencies": {
+    "@llm-chess/player-sdk": "*",
+    "@llm-chess/protocol": "*"
+  },
+  "devDependencies": {
+    "tsup": "latest"
+  }
+}

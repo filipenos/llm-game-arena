@@ -1,0 +1,12 @@
+{
+  "name": "@llm-chess/chess",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@llm-chess/core": "*",
+    "@llm-chess/protocol": "*",
+    "chess.js": "latest"
+  }
+}

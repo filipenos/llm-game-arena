@@ -1,0 +1,14 @@
+{
+  "name": "@llm-chess/player-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@llm-chess/protocol": "*",
+    "ws": "latest"
+  },
+  "devDependencies": {
+    "@types/ws": "latest"
+  }
+}
