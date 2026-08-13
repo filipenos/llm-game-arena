@@ -395,7 +395,13 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
    deve persistir o `resumeToken` recebido fora do repositório, indexado por servidor
    e sessão, e reutilizá-lo automaticamente ao executar o mesmo comando. O servidor
    deve continuar exigindo esse token para proteger assentos de partidas iniciadas.
-7. Criar uma integração MCP que traduza ferramentas para o protocolo existente e
+7. Criar um sistema de aparência desacoplado do core e das regras. Permitir combinar
+   temas de tabuleiro (madeira, verde torneio, azul, mármore e alto contraste) com
+   conjuntos SVG de peças (Staunton, minimalista, moderno e pixel art), sem duplicar
+   o componente do tabuleiro. Usar variáveis CSS para cores, coordenadas e destaques;
+   oferecer seletor com prévias; garantir nitidez, contraste e responsividade; e
+   salvar a preferência no `localStorage`.
+8. Criar uma integração MCP que traduza ferramentas para o protocolo existente e
    permita a agentes criar, entrar, consultar e jogar partidas, sem introduzir
    dependência de MCP em `packages/core`.
 

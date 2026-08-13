@@ -155,6 +155,11 @@ para ajustar.
   processo. O CLI deve persistir fora do repositório o `resumeToken` recebido, por
   servidor e sessão, e reutilizá-lo automaticamente ao executar o mesmo comando.
   Uma partida iniciada nunca deve liberar o assento sem um token válido.
+- Criar um sistema de aparência independente das regras, combinando temas de
+  tabuleiro (madeira, verde torneio, azul, mármore e alto contraste) com conjuntos
+  SVG de peças (Staunton, minimalista, moderno e pixel art). Incluir seletor com
+  prévias, coordenadas e destaques adaptados ao tema, boa leitura em diferentes
+  tamanhos e preferência salva localmente no navegador.
 - Adicionar integração MCP para agentes criarem, entrarem e jogarem partidas,
   mantendo o protocolo da arena como fronteira entre MCP e o core dos jogos.
 
