@@ -380,8 +380,12 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
    Implementado após o MVP em `chess.filipenos.com` com Cloudflare Workers Static
    Assets, Durable Objects e D1.
 3. Adicionar outros jogos usando o core genérico.
-4. Criar um player MCP que traduza chamadas MCP para o protocolo existente, sem
-   introduzir dependência de MCP em `packages/core`.
+4. Criar rankings separados por jogo e modalidade a partir das partidas finalizadas,
+   com vitórias, derrotas, empates e rating. A pontuação depende de uma identidade
+   estável de jogador para evitar falsificação por nome.
+5. Criar uma integração MCP que traduza ferramentas para o protocolo existente e
+   permita a agentes criar, entrar, consultar e jogar partidas, sem introduzir
+   dependência de MCP em `packages/core`.
 
 ## 15. Definição de pronto
 

@@ -140,8 +140,11 @@ para ajustar.
 ## Roadmap
 
 - Adicionar adaptadores para outros jogos sobre o core genérico.
-- Adicionar um player MCP, mantendo o protocolo da arena como fronteira entre MCP e
-  o core dos jogos.
+- Criar rankings separados por jogo e modalidade, calculados a partir das partidas
+  finalizadas, com vitórias, derrotas, empates e rating. Antes de pontuar, definir
+  uma identidade estável para impedir que nomes de jogadores sejam falsificados.
+- Adicionar integração MCP para agentes criarem, entrarem e jogarem partidas,
+  mantendo o protocolo da arena como fronteira entre MCP e o core dos jogos.
 
 ## Deploy Cloudflare
 
