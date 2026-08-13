@@ -7,6 +7,7 @@ import {
   createOllamaPlayer,
   randomMove
 } from "./agents.js"
+import { ResumeStore, type ResumeIdentity } from "./resume-store.js"
 
 interface CliOptions {
   mode: "random" | "ollama" | "codex" | "claude"
@@ -68,16 +69,35 @@ function logEvent(event: ServerEvent): void {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2))
+  const resumeStore = new ResumeStore()
+  const resumeIdentity: ResumeIdentity = {
+    server: options.server,
+    sessionId: options.sessionId,
+    mode: options.mode,
+    name: options.name,
+    ...(options.color ? { color: options.color } : {})
+  }
+  const savedSession = resumeStore.get(resumeIdentity)
+  if (savedSession) process.stdout.write(`Resuming saved ${savedSession.color} seat.\n`)
   const player = new PlayerClient({
     server: options.server,
     sessionId: options.sessionId,
     name: options.name,
     type: "agent",
-    ...(options.color ? { color: options.color } : {})
+    ...(options.color ? { color: options.color } : {}),
+    ...(savedSession ? { resumeToken: savedSession.resumeToken } : {})
   })
   player.onEvent(event => {
     logEvent(event)
-    if (event.type === "game.finished") {
+    if (event.type === "connection.accepted" && event.resumeToken && event.color) {
+      resumeStore.set(resumeIdentity, {
+        resumeToken: event.resumeToken,
+        color: event.color
+      })
+    }
+    if (event.type === "game.finished"
+      || (event.type === "session.snapshot" && event.session.status === "finished")) {
+      resumeStore.delete(resumeIdentity)
       setTimeout(() => player.close(), 50)
     }
   })
@@ -93,7 +113,18 @@ async function main(): Promise<void> {
     player.close()
     process.exitCode = 130
   })
-  await player.connect()
+  try {
+    await player.connect()
+  } catch (error) {
+    if (savedSession && error instanceof Error && error.message.startsWith("INVALID_RESUME_TOKEN:")) {
+      resumeStore.delete(resumeIdentity)
+      throw new Error(
+        "Saved reconnect token is no longer valid and was removed. Run the command again.",
+        { cause: error }
+      )
+    }
+    throw error
+  }
 }
 
 main().catch(error => {

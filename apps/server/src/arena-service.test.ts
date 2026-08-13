@@ -152,6 +152,52 @@ describe("ArenaService", () => {
     expect(whiteEvents.filter(event => event.type === "game.started")).toHaveLength(startedEvents)
   })
 
+  it("lets a disconnected player resume an in-progress turn with its token", async () => {
+    const arena = new ArenaService()
+    const session = arena.sessions.createSession()
+    const originalWhiteEvents: ServerEvent[] = []
+    const resumedWhiteEvents: ServerEvent[] = []
+    arena.addConnection("white", eventSink(originalWhiteEvents))
+    arena.addConnection("black", eventSink([]))
+
+    await arena.handleEvent("white", {
+      type: "connection.join", sessionId: session.id, role: "player",
+      name: "Codex", participantType: "agent", requestedColor: "white"
+    })
+    await arena.handleEvent("black", {
+      type: "connection.join", sessionId: session.id, role: "player",
+      name: "Claude", participantType: "agent", requestedColor: "black"
+    })
+    await arena.handleEvent("white", { type: "player.ready" })
+    await arena.handleEvent("black", { type: "player.ready" })
+    arena.startSession(session.id, session.controllerToken)
+    const resumeToken = originalWhiteEvents.find((
+      event
+    ): event is Extract<ServerEvent, { type: "connection.accepted" }> => (
+      event.type === "connection.accepted"
+    ))?.resumeToken
+    expect(resumeToken).toBeDefined()
+
+    arena.removeConnection("white")
+    arena.addConnection("resumed-white", eventSink(resumedWhiteEvents))
+    await arena.handleEvent("resumed-white", {
+      type: "connection.join",
+      sessionId: session.id,
+      role: "player",
+      resumeToken
+    })
+
+    expect(resumedWhiteEvents).toContainEqual(expect.objectContaining({
+      type: "connection.accepted",
+      color: "white"
+    }))
+    expect(resumedWhiteEvents).toContainEqual(expect.objectContaining({
+      type: "turn.started",
+      color: "white",
+      ply: 0
+    }))
+  })
+
   it("gives a late spectator a complete mid-game snapshot", async () => {
     const arena = new ArenaService()
     const session = arena.sessions.createSession()

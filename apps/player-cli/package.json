@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@llm-chess/player-sdk": "*",
-    "@llm-chess/protocol": "*"
+    "@llm-chess/protocol": "*",
+    "zod": "latest"
   },
   "devDependencies": {
     "tsup": "latest"
