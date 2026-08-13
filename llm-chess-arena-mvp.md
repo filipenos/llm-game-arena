@@ -374,8 +374,11 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
 
 ## 14. Próximas fases fora do MVP
 
-1. Persistir sessões em andamento e partidas finalizadas.
+1. Persistir sessões em andamento e partidas finalizadas. Implementado após o MVP
+   com Durable Objects SQLite e índice D1.
 2. Publicar frontend e servidor em infraestrutura gratuita compatível com WebSocket.
+   Implementado após o MVP em `chess.filipenos.com` com Cloudflare Workers Static
+   Assets, Durable Objects e D1.
 3. Adicionar outros jogos usando o core genérico.
 4. Criar um player MCP que traduza chamadas MCP para o protocolo existente, sem
    introduzir dependência de MCP em `packages/core`.

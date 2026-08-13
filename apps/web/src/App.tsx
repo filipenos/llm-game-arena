@@ -4,10 +4,12 @@ import type {
   Promotion,
   PublicParticipant,
   ServerEvent,
-  SessionSnapshot
+  SessionSnapshot,
+  SessionSummary
 } from "@llm-chess/protocol"
 
-const HTTP_SERVER = import.meta.env.VITE_SERVER_URL ?? "http://localhost:3001"
+const HTTP_SERVER = import.meta.env.VITE_SERVER_URL
+  ?? (import.meta.env.DEV ? "http://localhost:3001" : window.location.origin)
 const WS_SERVER = HTTP_SERVER.replace(/^http/, "ws")
 const SESSION_ID_PATTERN = /^[A-HJ-NP-Z2-9]{6}$/
 
@@ -117,6 +119,23 @@ export function App() {
     room ? localStorage.getItem(controllerKey(room.sessionId)) ?? "" : ""
   )
   const socketRef = useRef<WebSocket | undefined>(undefined)
+  const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([])
+
+  useEffect(() => {
+    if (room) return
+    let stopped = false
+    void fetch(`${HTTP_SERVER}/api/sessions?status=finished&limit=6`)
+      .then(async response => response.ok
+        ? await response.json() as { sessions: SessionSummary[] }
+        : { sessions: [] })
+      .then(data => {
+        if (!stopped) setRecentSessions(data.sessions)
+      })
+      .catch(() => {
+        if (!stopped) setRecentSessions([])
+      })
+    return () => { stopped = true }
+  }, [room])
 
   useEffect(() => {
     if (!room) return
@@ -128,7 +147,7 @@ export function App() {
     let retry: number | undefined
 
     const connect = () => {
-      const socket = new WebSocket(`${WS_SERVER}/ws`)
+      const socket = new WebSocket(`${WS_SERVER}/ws?session=${room.sessionId}`)
       socketRef.current = socket
       let resumeTokenUsed: string | null = null
       let retriedWithoutToken = false
@@ -304,7 +323,8 @@ export function App() {
         <section className="hero">
           <p className="eyebrow">LOCAL PLAYGROUND</p>
           <h1>LLM Chess Arena</h1>
-          <p>Coloque humanos e agentes no mesmo tabuleiro. O servidor cuida das regras.</p>
+          <p className="hero-copy">Coloque humanos e agentes no mesmo tabuleiro. O servidor cuida das regras.</p>
+          {recentSessions.length > 0 && <RecentSessions sessions={recentSessions} />}
         </section>
         <section className="entry-card">
           <label>
@@ -420,18 +440,48 @@ export function App() {
   )
 }
 
+function RecentSessions({ sessions }: { sessions: SessionSummary[] }) {
+  return (
+    <section className="recent-sessions" aria-label="Partidas recentes">
+      <p className="eyebrow">PARTIDAS RECENTES</p>
+      <div className="recent-list">
+        {sessions.map(session => {
+          const winner = session.winner === "white"
+            ? session.whiteName
+            : session.winner === "black" ? session.blackName : null
+          return (
+            <article key={session.sessionId}>
+              <div>
+                <b>{session.whiteName ?? "Brancas"}</b>
+                <span> × </span>
+                <b>{session.blackName ?? "Pretas"}</b>
+              </div>
+              <small>
+                {winner ? `${winner} venceu` : "Empate"}
+                {session.finishReason ? ` · ${session.finishReason}` : ""}
+                {` · ${Math.ceil(session.ply / 2)} lances`}
+              </small>
+            </article>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 function InviteHelp({ sessionId }: { sessionId: string }) {
   const commandPrefix = "npm run dev --workspace @llm-chess/player-cli --"
+  const serverOption = import.meta.env.DEV ? "" : ` --server ${WS_SERVER}`
   return (
     <details className="invite-help" open>
       <summary>Convidar pessoas ou LLMs</summary>
       <p>Compartilhe este link. Sem uma cor definida, o servidor sorteia um assento livre:</p>
       <code>{playerInviteUrl(sessionId)}</code>
       <p>Ou conecte um agente pelo terminal:</p>
-      <code>{commandPrefix} codex {sessionId}</code>
-      <code>{commandPrefix} claude {sessionId}</code>
-      <code>{commandPrefix} ollama {sessionId} --model qwen3:8b</code>
-      <code>{commandPrefix} random {sessionId}</code>
+      <code>{commandPrefix} codex {sessionId}{serverOption}</code>
+      <code>{commandPrefix} claude {sessionId}{serverOption}</code>
+      <code>{commandPrefix} ollama {sessionId} --model qwen3:8b{serverOption}</code>
+      <code>{commandPrefix} random {sessionId}{serverOption}</code>
       <p className="help-note">Use <b>--seat white</b> ou <b>--seat black</b> somente quando quiser exigir uma cor.</p>
     </details>
   )

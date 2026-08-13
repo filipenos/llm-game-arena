@@ -117,4 +117,31 @@ describe("SessionManager", () => {
     expect(resumed.connected).toBe(true)
     expect(resumed.connectionId).toBe("new")
   })
+
+  it("restores a persisted in-progress session without exposing private tokens", () => {
+    const manager = new SessionManager()
+    const session = manager.createSession("K7P4QX")
+    const white = manager.joinPlayer(session.id, {
+      connectionId: "white", name: "White", type: "human", requestedColor: "white"
+    }).participant
+    const black = manager.joinPlayer(session.id, {
+      connectionId: "black", name: "Black", type: "agent", requestedColor: "black"
+    }).participant
+    manager.markReady(session, white)
+    manager.markReady(session, black)
+    manager.startGame(session.id, session.controllerToken)
+    session.game?.submitAction("white", { from: "e2", to: "e4" })
+
+    const persisted = manager.persistable(session)
+    const restoredManager = new SessionManager()
+    const restored = restoredManager.restore(persisted)
+
+    expect(restored.game?.getActionCount()).toBe(1)
+    expect(restored.game?.getPublicState().fen).toBe(session.game?.getPublicState().fen)
+    expect(restored.white?.connected).toBe(false)
+    expect(restored.black?.connected).toBe(false)
+    expect(restoredManager.snapshot(restored).game?.moves[0]?.uci).toBe("e2e4")
+    expect(JSON.stringify(restoredManager.snapshot(restored))).not.toContain(session.controllerToken)
+    expect(JSON.stringify(restoredManager.snapshot(restored))).not.toContain(white.resumeToken)
+  })
 })

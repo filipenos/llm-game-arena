@@ -70,6 +70,12 @@ describe("HTTP API", () => {
       session: { id: session.id, status: "playing" },
       game: { ply: 0, turn: "white" }
     })
+
+    const listResponse = await fetch(`${baseUrl}/api/sessions?status=playing`)
+    expect(listResponse.status).toBe(200)
+    await expect(listResponse.json()).resolves.toMatchObject({
+      sessions: [{ sessionId: session.id, status: "playing", whiteName: "White", blackName: "Black" }]
+    })
   })
 
   it("returns stable errors for invalid and missing session IDs", async () => {

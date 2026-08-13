@@ -12,19 +12,44 @@ export interface EventSink {
   close?(): void
 }
 
-interface ConnectionBinding {
+export interface ConnectionBinding {
   sessionId: string
   role: "player" | "spectator"
+  participantId?: string
 }
 
 export class ArenaService {
-  readonly sessions = new SessionManager()
   private readonly sinks = new Map<string, EventSink>()
   private readonly bindings = new Map<string, ConnectionBinding>()
   private readonly queues = new Map<string, Promise<void>>()
 
+  constructor(readonly sessions = new SessionManager()) {}
+
   addConnection(connectionId: string, sink: EventSink): void {
     this.sinks.set(connectionId, sink)
+  }
+
+  restoreConnection(
+    connectionId: string,
+    sink: EventSink,
+    binding?: ConnectionBinding
+  ): void {
+    this.addConnection(connectionId, sink)
+    if (!binding) return
+    if (binding.role === "player" && binding.participantId) {
+      const session = this.sessions.restorePlayerConnection(binding.participantId, connectionId)
+      if (!session || session.id !== binding.sessionId) return
+    } else if (binding.role === "spectator") {
+      this.sessions.restoreSpectatorConnection(binding.sessionId, connectionId)
+    } else {
+      return
+    }
+    this.bindings.set(connectionId, binding)
+  }
+
+  connectionBinding(connectionId: string): ConnectionBinding | undefined {
+    const binding = this.bindings.get(connectionId)
+    return binding ? { ...binding } : undefined
   }
 
   removeConnection(connectionId: string): void {
@@ -122,7 +147,11 @@ export class ArenaService {
           requestedColor: event.requestedColor,
           resumeToken: event.resumeToken
         })
-        this.bindings.set(connectionId, { sessionId: session.id, role: "player" })
+        this.bindings.set(connectionId, {
+          sessionId: session.id,
+          role: "player",
+          participantId: participant.id
+        })
         this.send(connectionId, {
           type: "connection.accepted",
           connectionId,

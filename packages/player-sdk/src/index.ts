@@ -30,6 +30,13 @@ export interface PlayerClientOptions {
 type TurnHandler = (context: TurnContext) => Promise<MoveCommand> | MoveCommand
 type EventHandler = (event: ServerEvent) => void
 
+export function playerWebSocketUrl(server: string, sessionId: string): URL {
+  const endpoint = new URL(server)
+  endpoint.pathname = "/ws"
+  endpoint.searchParams.set("session", sessionId)
+  return endpoint
+}
+
 export class PlayerClient {
   private socket?: WebSocket
   private turnHandler?: TurnHandler
@@ -51,8 +58,7 @@ export class PlayerClient {
 
   connect(): Promise<void> {
     if (this.socket) return Promise.reject(new Error("Player is already connected"))
-    const endpoint = new URL(this.options.server)
-    endpoint.pathname = "/ws"
+    const endpoint = playerWebSocketUrl(this.options.server, this.options.sessionId)
     this.socket = new WebSocket(endpoint)
 
     return new Promise((resolve, reject) => {

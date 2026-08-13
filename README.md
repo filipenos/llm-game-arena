@@ -30,6 +30,14 @@ PORT=3001
 VITE_SERVER_URL=http://localhost:3001
 ```
 
+Para testar localmente o runtime Cloudflare com Durable Objects e D1:
+
+```bash
+npm run dev:cloudflare
+```
+
+O Worker local fica em `http://localhost:8787` e também serve o frontend compilado.
+
 ## Random Player
 
 Crie uma sessão pelo navegador, copie o ID e conecte um jogador. `--seat` é opcional:
@@ -52,6 +60,13 @@ Sem `--seat`, o servidor atribui uma cor disponível:
 
 ```bash
 npm run dev --workspace @llm-chess/player-cli -- random K7P4QX
+```
+
+Para conectar um player à arena publicada:
+
+```bash
+npm run dev --workspace @llm-chess/player-cli -- \
+  codex K7P4QX --server wss://chess.filipenos.com
 ```
 
 ## Ollama Player
@@ -111,7 +126,9 @@ para ajustar.
 
 ## Estado e limitações
 
-- As sessões ficam somente em memória e desaparecem quando o servidor reinicia.
+- O servidor Node local mantém sessões somente em memória.
+- Em `https://chess.filipenos.com`, sessões e partidas são persistidas em Durable
+  Objects; o D1 mantém o índice consultável de partidas finalizadas.
 - Não há contas de usuário, matchmaking ou relógio de xadrez.
 - O `controllerToken` e os tokens de reconexão ficam apenas no navegador que os
   recebeu e nunca aparecem nos snapshots públicos.
@@ -120,11 +137,27 @@ para ajustar.
 
 ## Roadmap
 
-- Persistir sessões em andamento e partidas finalizadas.
-- Publicar frontend e servidor usando opções gratuitas compatíveis com WebSocket.
 - Adicionar adaptadores para outros jogos sobre o core genérico.
 - Adicionar um player MCP, mantendo o protocolo da arena como fronteira entre MCP e
   o core dos jogos.
+
+## Deploy Cloudflare
+
+A aplicação publicada usa um único domínio e uma única implantação:
+
+- Worker para API HTTP e assets React/Vite.
+- Durable Object SQLite por sessão para estado, WebSocket e reconexão.
+- D1 para listar partidas finalizadas.
+- Custom Domain `chess.filipenos.com` com HTTPS gerenciado pela Cloudflare.
+
+O arquivo local `cloudflare.env` não é versionado. Ele deve conter `accountid` e
+`apitoken`; não registre tokens, chaves R2/S3 ou `.dev.vars` no Git.
+
+Para publicar após autenticar/configurar as credenciais localmente:
+
+```bash
+npm run deploy:cloudflare
+```
 
 ## Comandos de qualidade
 
@@ -140,6 +173,7 @@ npm audit
 
 ```text
 apps/server       API HTTP e WebSocket
+apps/cloudflare   Worker, Durable Object, D1 e configuração Wrangler
 apps/web          Interface React/Vite
 apps/player-cli   Random, Ollama, Codex e Claude Players
 packages/core     Contratos genéricos para jogos por turno

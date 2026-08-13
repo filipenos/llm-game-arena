@@ -5,6 +5,10 @@ coverage/
 .env.local
 .env.*
 !.env.example
+cloudflare.env
+.dev.vars
+.dev.vars.*
+.wrangler/
 .codex/
 .claude/
 .agents/

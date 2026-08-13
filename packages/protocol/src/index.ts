@@ -80,6 +80,19 @@ export interface SessionSnapshot {
   game?: PublicGame
 }
 
+export interface SessionSummary {
+  sessionId: string
+  gameType: string
+  status: SessionStatus
+  whiteName: string | null
+  blackName: string | null
+  winner: Color | null
+  finishReason: GameFinishReason | null
+  ply: number
+  createdAt?: string
+  updatedAt?: string
+}
+
 const playerJoinSchema = z.object({
   type: z.literal("connection.join"),
   sessionId: sessionIdSchema,

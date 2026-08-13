@@ -5,6 +5,8 @@ import {
 } from "@llm-chess/chess"
 import type {
   Color,
+  GameResult,
+  MoveCommand,
   ParticipantType,
   PlayerActivity,
   SessionSnapshot,
@@ -39,6 +41,32 @@ export interface SessionRecord {
   processedRequestIds: Set<string>
 }
 
+export interface PersistedParticipant {
+  id: string
+  name: string
+  type: ParticipantType
+  color: Color
+  ready: boolean
+  activity: PlayerActivity
+  resumeToken: string
+}
+
+export interface PersistedSession {
+  id: string
+  gameType: string
+  revision: number
+  status: SessionStatus
+  controllerToken: string
+  white?: PersistedParticipant
+  black?: PersistedParticipant
+  game?: {
+    id: string
+    moves: MoveCommand[]
+    result?: GameResult
+  }
+  processedRequestIds: string[]
+}
+
 export interface JoinPlayerInput {
   connectionId: string
   name?: string
@@ -53,7 +81,7 @@ export interface JoinPlayerResult {
 }
 
 function secureToken(): string {
-  return randomBytes(32).toString("base64url")
+  return Buffer.from(randomBytes(32)).toString("base64url")
 }
 
 export class SessionManager {
@@ -63,9 +91,12 @@ export class SessionManager {
     private readonly gameDefinition = chessGameDefinition
   ) {}
 
-  createSession(): SessionRecord {
-    let id = this.makeSessionId()
-    while (this.sessions.has(id)) id = this.makeSessionId()
+  createSession(requestedId?: string): SessionRecord {
+    let id = requestedId ?? this.makeSessionId()
+    while (!requestedId && this.sessions.has(id)) id = this.makeSessionId()
+    if (this.sessions.has(id)) {
+      throw new DomainError("INVALID_MESSAGE", "Session already exists")
+    }
 
     const session: SessionRecord = {
       id,
@@ -80,10 +111,83 @@ export class SessionManager {
     return session
   }
 
+  persistable(session: SessionRecord): PersistedSession {
+    const result = session.game?.getOutcome()
+    return {
+      id: session.id,
+      gameType: session.gameType,
+      revision: session.revision,
+      status: session.status,
+      controllerToken: session.controllerToken,
+      ...(session.white ? { white: this.persistableParticipant(session.white) } : {}),
+      ...(session.black ? { black: this.persistableParticipant(session.black) } : {}),
+      ...(session.game ? {
+        game: {
+          id: session.game.id,
+          moves: session.game.getHistory().map(move => ({
+            from: move.from,
+            to: move.to,
+            ...(move.promotion ? { promotion: move.promotion } : {})
+          })),
+          ...(result ? { result } : {})
+        }
+      } : {}),
+      processedRequestIds: [...session.processedRequestIds]
+    }
+  }
+
+  restore(persisted: PersistedSession): SessionRecord {
+    if (this.sessions.has(persisted.id)) return this.getSession(persisted.id)
+    const session: SessionRecord = {
+      id: persisted.id,
+      gameType: persisted.gameType,
+      revision: persisted.revision,
+      status: persisted.status,
+      controllerToken: persisted.controllerToken,
+      ...(persisted.white ? { white: this.restoreParticipant(persisted.white) } : {}),
+      ...(persisted.black ? { black: this.restoreParticipant(persisted.black) } : {}),
+      spectators: new Set(),
+      processedRequestIds: new Set(persisted.processedRequestIds)
+    }
+    if (persisted.game) {
+      session.game = this.gameDefinition.create(persisted.game.id)
+      for (const move of persisted.game.moves) {
+        const result = session.game.submitAction(session.game.getCurrentSeat(), move)
+        if (!result.valid) throw new Error(`Cannot restore invalid move in session ${session.id}`)
+      }
+      if (persisted.game.result?.reason === "resignation" && persisted.game.result.winner) {
+        session.game.resign(persisted.game.result.winner === "white" ? "black" : "white")
+      }
+    }
+    this.sessions.set(session.id, session)
+    return session
+  }
+
+  restorePlayerConnection(participantId: string, connectionId: string): SessionRecord | undefined {
+    for (const session of this.sessions.values()) {
+      const participant = [session.white, session.black].find(candidate => candidate?.id === participantId)
+      if (!participant) continue
+      participant.connectionId = connectionId
+      participant.connected = true
+      return session
+    }
+    return undefined
+  }
+
+  restoreSpectatorConnection(sessionId: string, connectionId: string): SessionRecord {
+    const session = this.getSession(sessionId)
+    session.spectators.add(connectionId)
+    return session
+  }
+
   getSession(id: string): SessionRecord {
     const session = this.sessions.get(id)
     if (!session) throw new DomainError("SESSION_NOT_FOUND", "Session not found", 404)
     return session
+  }
+
+  listSessions(status?: SessionStatus): SessionRecord[] {
+    return [...this.sessions.values()].filter(session => !status || session.status === status)
   }
 
   addSpectator(sessionId: string, connectionId: string): SessionRecord {
@@ -254,6 +358,25 @@ export class SessionManager {
     }
   }
 
+  private persistableParticipant(participant: ParticipantRecord): PersistedParticipant {
+    return {
+      id: participant.id,
+      name: participant.name,
+      type: participant.type,
+      color: participant.color,
+      ready: participant.ready,
+      activity: participant.activity,
+      resumeToken: participant.resumeToken
+    }
+  }
+
+  private restoreParticipant(participant: PersistedParticipant): ParticipantRecord {
+    return {
+      ...participant,
+      connected: false
+    }
+  }
+
   private getSeat(session: SessionRecord, color: Color): ParticipantRecord | undefined {
     return color === "white" ? session.white : session.black
   }
@@ -268,7 +391,7 @@ export class SessionManager {
     if (!session.white) available.push("white")
     if (!session.black) available.push("black")
     if (available.length < 2) return available[0]
-    return available[randomBytes(1).readUInt8(0) % available.length]
+    return available[(randomBytes(1)[0] ?? 0) % available.length]
   }
 
   private makeSessionId(): string {

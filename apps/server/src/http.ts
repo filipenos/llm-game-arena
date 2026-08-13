@@ -39,6 +39,27 @@ export function createHttpApp(arena: ArenaService) {
     })
   })
 
+  app.get("/api/sessions", (request, response) => {
+    const status = request.query.status === "waiting" || request.query.status === "ready"
+      || request.query.status === "playing" || request.query.status === "finished"
+      ? request.query.status
+      : "finished"
+    const sessions = arena.sessions.listSessions(status).map(session => {
+      const snapshot = arena.sessions.snapshot(session)
+      return {
+        sessionId: session.id,
+        gameType: session.gameType,
+        status: session.status,
+        whiteName: session.white?.name ?? null,
+        blackName: session.black?.name ?? null,
+        winner: snapshot.game?.result?.winner ?? null,
+        finishReason: snapshot.game?.result?.reason ?? null,
+        ply: snapshot.game?.ply ?? 0
+      }
+    })
+    response.json({ sessions })
+  })
+
   app.get("/api/sessions/:sessionId", (request, response) => {
     const sessionId = parseSessionId(request.params.sessionId)
     const session = arena.sessions.getSession(sessionId)
