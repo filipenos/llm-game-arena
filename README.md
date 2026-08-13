@@ -151,6 +151,10 @@ para ajustar.
   OpenRouter. Aceitar modelos Nemotron e outras famílias disponibilizadas pelo
   provedor, mantendo separados nos dados da partida o provedor, o tipo de player e
   o identificador exato do modelo.
+- Permitir que players CLI retomem uma partida depois de queda ou reinício do
+  processo. O CLI deve persistir fora do repositório o `resumeToken` recebido, por
+  servidor e sessão, e reutilizá-lo automaticamente ao executar o mesmo comando.
+  Uma partida iniciada nunca deve liberar o assento sem um token válido.
 - Adicionar integração MCP para agentes criarem, entrarem e jogarem partidas,
   mantendo o protocolo da arena como fronteira entre MCP e o core dos jogos.
 

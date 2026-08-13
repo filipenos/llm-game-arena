@@ -391,7 +391,11 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
    OpenRouter, e aceitar modelos Nemotron e outras famílias oferecidas pelo provedor.
    Persistir separadamente o provedor, o tipo de player e o identificador exato do
    modelo usado em cada partida.
-6. Criar uma integração MCP que traduza ferramentas para o protocolo existente e
+6. Permitir retomada de players CLI depois de queda ou reinício do processo. O CLI
+   deve persistir o `resumeToken` recebido fora do repositório, indexado por servidor
+   e sessão, e reutilizá-lo automaticamente ao executar o mesmo comando. O servidor
+   deve continuar exigindo esse token para proteger assentos de partidas iniciadas.
+7. Criar uma integração MCP que traduza ferramentas para o protocolo existente e
    permita a agentes criar, entrar, consultar e jogar partidas, sem introduzir
    dependência de MCP em `packages/core`.
 
