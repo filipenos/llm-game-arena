@@ -119,6 +119,7 @@ export function App() {
   const [participantId, setParticipantId] = useState<string>()
   const [legalMoves, setLegalMoves] = useState<string[]>([])
   const [movePending, setMovePending] = useState(false)
+  const [startPending, setStartPending] = useState(false)
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState("")
   const [controllerToken, setControllerToken] = useState(
@@ -299,15 +300,22 @@ export function App() {
   }
 
   async function startGame(): Promise<void> {
-    if (!room || !controllerToken) return
+    if (!room || !controllerToken || startPending) return
     setError("")
-    const response = await fetch(`${HTTP_SERVER}/api/sessions/${room.sessionId}/start`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${controllerToken}` }
-    })
-    if (!response.ok) {
-      const body = await response.json() as { code?: string; message?: string }
-      setError(`${body.code ?? "ERROR"}: ${body.message ?? "Não foi possível iniciar"}`)
+    setStartPending(true)
+    try {
+      const response = await fetch(`${HTTP_SERVER}/api/sessions/${room.sessionId}/start`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${controllerToken}` }
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { code?: string; message?: string }
+        setError(`${body.code ?? "ERROR"}: ${body.message ?? "Não foi possível iniciar"}`)
+      }
+    } catch {
+      setError("Falha de conexão ao iniciar a partida. Tente novamente.")
+    } finally {
+      setStartPending(false)
     }
   }
 
@@ -413,8 +421,8 @@ export function App() {
           {snapshot?.session.status !== "playing" && snapshot?.session.status !== "finished" && (
             <div className="lobby-actions">
               {controllerToken && (
-                <button disabled={snapshot?.session.status !== "ready"} onClick={() => void startGame()}>
-                  Iniciar partida
+                <button disabled={snapshot?.session.status !== "ready" || startPending} onClick={() => void startGame()}>
+                  {startPending ? "Iniciando…" : "Iniciar partida"}
                 </button>
               )}
               <InviteHelp sessionId={room.sessionId} />

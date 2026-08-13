@@ -264,6 +264,7 @@ export class SessionManager {
     if (session.controllerToken !== controllerToken) {
       throw new DomainError("UNAUTHORIZED", "Invalid controller token", 401)
     }
+    if (session.status === "playing" && session.game) return session
     if (session.status !== "ready") {
       throw new DomainError("SESSION_NOT_READY", "Both players must be connected and ready")
     }

@@ -125,6 +125,33 @@ describe("ArenaService", () => {
     expect(blackEvents.at(-1)).toMatchObject({ type: "error", code: "GAME_NOT_PLAYING" })
   })
 
+  it("treats a repeated start request as idempotent", async () => {
+    const arena = new ArenaService()
+    const session = arena.sessions.createSession()
+    const whiteEvents: ServerEvent[] = []
+    arena.addConnection("white", eventSink(whiteEvents))
+    arena.addConnection("black", eventSink([]))
+
+    await arena.handleEvent("white", {
+      type: "connection.join", sessionId: session.id, role: "player",
+      name: "White", participantType: "human", requestedColor: "white"
+    })
+    await arena.handleEvent("black", {
+      type: "connection.join", sessionId: session.id, role: "player",
+      name: "Black", participantType: "agent", requestedColor: "black"
+    })
+    await arena.handleEvent("white", { type: "player.ready" })
+    await arena.handleEvent("black", { type: "player.ready" })
+
+    arena.startSession(session.id, session.controllerToken)
+    const gameId = session.game?.id
+    const startedEvents = whiteEvents.filter(event => event.type === "game.started").length
+
+    expect(arena.startSession(session.id, session.controllerToken)).toBe(session)
+    expect(session.game?.id).toBe(gameId)
+    expect(whiteEvents.filter(event => event.type === "game.started")).toHaveLength(startedEvents)
+  })
+
   it("gives a late spectator a complete mid-game snapshot", async () => {
     const arena = new ArenaService()
     const session = arena.sessions.createSession()

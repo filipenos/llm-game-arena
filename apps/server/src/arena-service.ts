@@ -83,9 +83,12 @@ export class ArenaService {
   }
 
   startSession(sessionId: string, controllerToken: string): SessionRecord {
+    const current = this.sessions.getSession(sessionId)
+    const alreadyStarted = current.status === "playing" && Boolean(current.game)
     const session = this.sessions.startGame(sessionId, controllerToken)
     const game = session.game
     if (!game) throw new DomainError("INTERNAL_ERROR", "Game was not created", 500)
+    if (alreadyStarted) return session
 
     this.broadcast(session, {
       type: "game.started",

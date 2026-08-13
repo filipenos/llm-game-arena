@@ -51,7 +51,15 @@ function json(data: unknown, status = 200): Response {
   })
 }
 
-function errorResponse(error: unknown): Response {
+function logUnexpectedError(context: string, error: unknown): void {
+  if (error instanceof DomainError && error.httpStatus < 500) return
+  console.error(context, error instanceof Error
+    ? { name: error.name, message: error.message, stack: error.stack }
+    : { value: String(error) })
+}
+
+function errorResponse(error: unknown, context = "Worker request failed"): Response {
+  logUnexpectedError(context, error)
   if (error instanceof DomainError) {
     return json({ code: error.code, message: error.message }, error.httpStatus)
   }
@@ -214,7 +222,7 @@ export class SessionDurableObject extends DurableObject<Env> {
       if (url.pathname === "/ws") return this.upgradeWebSocket(request)
       return json({ code: "SESSION_NOT_FOUND", message: "Route not found" }, 404)
     } catch (error) {
-      return errorResponse(error)
+      return errorResponse(error, "Session request failed")
     }
   }
 
@@ -246,6 +254,9 @@ export class SessionDurableObject extends DurableObject<Env> {
       await this.persist()
     } catch (error) {
       const messageText = error instanceof SyntaxError ? "Message must be valid JSON" : "Invalid message"
+      if (!(error instanceof DomainError) && !(error instanceof SyntaxError)) {
+        logUnexpectedError("Session WebSocket message failed", error)
+      }
       this.arena.sendError(
         attachment.connectionId,
         error instanceof DomainError ? error : new DomainError("INVALID_MESSAGE", messageText)
@@ -336,27 +347,31 @@ export class SessionDurableObject extends DurableObject<Env> {
     if (!this.arena || !this.session) return
     await this.context.storage.put("session", this.arena.sessions.persistable(this.session))
     const snapshot = this.arena.sessions.snapshot(this.session)
-    await this.env.DB.prepare(
-      `INSERT INTO sessions (
-        id, game_type, status, white_name, black_name, winner, finish_reason, ply, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(id) DO UPDATE SET
-        status = excluded.status,
-        white_name = excluded.white_name,
-        black_name = excluded.black_name,
-        winner = excluded.winner,
-        finish_reason = excluded.finish_reason,
-        ply = excluded.ply,
-        updated_at = CURRENT_TIMESTAMP`
-    ).bind(
-      this.session.id,
-      this.session.gameType,
-      this.session.status,
-      this.session.white?.name ?? null,
-      this.session.black?.name ?? null,
-      snapshot.game?.result?.winner ?? null,
-      snapshot.game?.result?.reason ?? null,
-      snapshot.game?.ply ?? 0
-    ).run()
+    try {
+      await this.env.DB.prepare(
+        `INSERT INTO sessions (
+          id, game_type, status, white_name, black_name, winner, finish_reason, ply, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          status = excluded.status,
+          white_name = excluded.white_name,
+          black_name = excluded.black_name,
+          winner = excluded.winner,
+          finish_reason = excluded.finish_reason,
+          ply = excluded.ply,
+          updated_at = CURRENT_TIMESTAMP`
+      ).bind(
+        this.session.id,
+        this.session.gameType,
+        this.session.status,
+        this.session.white?.name ?? null,
+        this.session.black?.name ?? null,
+        snapshot.game?.result?.winner ?? null,
+        snapshot.game?.result?.reason ?? null,
+        snapshot.game?.ply ?? 0
+      ).run()
+    } catch (error) {
+      logUnexpectedError(`Session index update failed for ${this.session.id}`, error)
+    }
   }
 }
