@@ -609,6 +609,8 @@ function ChessBoard({
 }) {
   const pieces = useMemo(() => parseFen(fen), [fen])
   const [dragFrom, setDragFrom] = useState<string>()
+  const [selectedFrom, setSelectedFrom] = useState<string>()
+  const suppressClickAfterDrag = useRef(false)
   const [pendingPromotion, setPendingPromotion] = useState<{
     from: string
     to: string
@@ -618,8 +620,27 @@ function ChessBoard({
     () => new Set(legalMoves.map(move => move.slice(0, 2))),
     [legalMoves]
   )
+  const selectedOrigin = selectedFrom && enabled && legalOrigins.has(selectedFrom)
+    ? selectedFrom
+    : undefined
+  const activeFrom = dragFrom ?? selectedOrigin
   const files = orientation === "white" ? ["a", "b", "c", "d", "e", "f", "g", "h"] : ["h", "g", "f", "e", "d", "c", "b", "a"]
   const ranks = orientation === "white" ? [8, 7, 6, 5, 4, 3, 2, 1] : [1, 2, 3, 4, 5, 6, 7, 8]
+
+  function playMove(from: string, to: string): void {
+    const movingPiece = pieces.get(from)
+    setDragFrom(undefined)
+    setSelectedFrom(undefined)
+    if (movingPiece?.toLowerCase() === "p" && (to.endsWith("1") || to.endsWith("8"))) {
+      setPendingPromotion({
+        from,
+        to,
+        color: movingPiece === movingPiece.toUpperCase() ? "white" : "black"
+      })
+      return
+    }
+    onMove(from, to)
+  }
 
   useEffect(() => {
     if (!pendingPromotion) return
@@ -639,15 +660,28 @@ function ChessBoard({
         const isLight = (rankIndex + fileIndex) % 2 === 0
         const canDrag = Boolean(enabled && piece && legalOrigins.has(square))
         const isLegalTarget = Boolean(
-          enabled && dragFrom && legalMoves.some(move => move.startsWith(`${dragFrom}${square}`))
+          enabled && activeFrom && legalMoves.some(move => move.startsWith(`${activeFrom}${square}`))
         )
+        const isSelected = selectedOrigin === square
         const isLastMoveOrigin = lastMove?.from === square
         const isLastMoveTarget = lastMove?.to === square
         return (
           <div
-            className={`square ${isLight ? "light" : "dark"}${isLastMoveOrigin ? " last-move-origin" : ""}${isLastMoveTarget ? " last-move-target" : ""}${canDrag ? " legal-origin" : ""}${isLegalTarget ? " legal-target" : ""}`}
+            className={`square ${isLight ? "light" : "dark"}${isLastMoveOrigin ? " last-move-origin" : ""}${isLastMoveTarget ? " last-move-target" : ""}${canDrag ? " legal-origin" : ""}${isLegalTarget ? " legal-target" : ""}${isSelected ? " selected-origin" : ""}`}
             key={square}
             data-square={square}
+            onClick={() => {
+              if (suppressClickAfterDrag.current) return
+              if (!enabled) {
+                setSelectedFrom(undefined)
+                return
+              }
+              if (selectedOrigin && isLegalTarget) {
+                playMove(selectedOrigin, square)
+                return
+              }
+              setSelectedFrom(canDrag && selectedFrom !== square ? square : undefined)
+            }}
             onDragOver={event => { if (isLegalTarget) event.preventDefault() }}
             onDrop={event => {
               event.preventDefault()
@@ -655,20 +689,10 @@ function ChessBoard({
               const movePrefix = `${from}${square}`
               if (!enabled || !legalMoves.some(move => move.startsWith(movePrefix))) {
                 setDragFrom(undefined)
+                setSelectedFrom(undefined)
                 return
               }
-              const movingPiece = pieces.get(from)
-              if (movingPiece?.toLowerCase() === "p" && (rank === 1 || rank === 8)) {
-                setDragFrom(undefined)
-                setPendingPromotion({
-                  from,
-                  to: square,
-                  color: movingPiece === movingPiece.toUpperCase() ? "white" : "black"
-                })
-                return
-              }
-              setDragFrom(undefined)
-              onMove(from, square)
+              playMove(from, square)
             }}
           >
             {piece && (
@@ -676,11 +700,15 @@ function ChessBoard({
                 className="piece"
                 draggable={canDrag}
                 onDragStart={event => {
+                  suppressClickAfterDrag.current = true
                   event.dataTransfer.effectAllowed = "move"
                   event.dataTransfer.setData("text/plain", square)
                   setDragFrom(square)
                 }}
-                onDragEnd={() => setDragFrom(undefined)}
+                onDragEnd={() => {
+                  setDragFrom(undefined)
+                  window.setTimeout(() => { suppressClickAfterDrag.current = false }, 0)
+                }}
               >
                 {pieceSymbols[piece]}
               </span>
