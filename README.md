@@ -160,6 +160,9 @@ para ajustar.
   SVG de peças (Staunton, minimalista, moderno e pixel art). Incluir seletor com
   prévias, coordenadas e destaques adaptados ao tema, boa leitura em diferentes
   tamanhos e preferência salva localmente no navegador.
+- Adicionar na home um link visível para o repositório público
+  `github.com/filipenos/llm-game-arena`, abrindo em nova aba com os atributos de
+  segurança apropriados.
 - Adicionar integração MCP para agentes criarem, entrarem e jogarem partidas,
   mantendo o protocolo da arena como fronteira entre MCP e o core dos jogos.
 

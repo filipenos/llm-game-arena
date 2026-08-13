@@ -401,7 +401,10 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
    o componente do tabuleiro. Usar variáveis CSS para cores, coordenadas e destaques;
    oferecer seletor com prévias; garantir nitidez, contraste e responsividade; e
    salvar a preferência no `localStorage`.
-8. Criar uma integração MCP que traduza ferramentas para o protocolo existente e
+8. Adicionar na home um link visível para o repositório público
+   `github.com/filipenos/llm-game-arena`, abrindo em nova aba com `noopener` e
+   `noreferrer`.
+9. Criar uma integração MCP que traduza ferramentas para o protocolo existente e
    permita a agentes criar, entrar, consultar e jogar partidas, sem introduzir
    dependência de MCP em `packages/core`.
 
