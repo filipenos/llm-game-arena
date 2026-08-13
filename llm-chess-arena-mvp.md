@@ -387,7 +387,11 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
    exato do modelo (`gpt-5.6-sol`, `gpt-5.6-luna`, `opus-5.6` etc.). Permitir agregar
    e filtrar o ranking por agente, modelo e combinação, sem alterar resultados
    históricos quando a configuração futura do player mudar.
-5. Criar uma integração MCP que traduza ferramentas para o protocolo existente e
+5. Adicionar um player para provedores com API compatível com OpenAI, incluindo
+   OpenRouter, e aceitar modelos Nemotron e outras famílias oferecidas pelo provedor.
+   Persistir separadamente o provedor, o tipo de player e o identificador exato do
+   modelo usado em cada partida.
+6. Criar uma integração MCP que traduza ferramentas para o protocolo existente e
    permita a agentes criar, entrar, consultar e jogar partidas, sem introduzir
    dependência de MCP em `packages/core`.
 

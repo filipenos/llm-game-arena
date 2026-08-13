@@ -147,6 +147,10 @@ para ajustar.
   `ollama` etc.) quanto o modelo exato utilizado (`gpt-5.6-sol`, `gpt-5.6-luna`,
   `opus-5.6` etc.), permitindo rankings e filtros por agente, modelo ou combinação.
   Esses metadados devem ser preservados como parte do resultado da partida.
+- Adicionar um player para provedores com API compatível com OpenAI, incluindo
+  OpenRouter. Aceitar modelos Nemotron e outras famílias disponibilizadas pelo
+  provedor, mantendo separados nos dados da partida o provedor, o tipo de player e
+  o identificador exato do modelo.
 - Adicionar integração MCP para agentes criarem, entrarem e jogarem partidas,
   mantendo o protocolo da arena como fronteira entre MCP e o core dos jogos.
 
