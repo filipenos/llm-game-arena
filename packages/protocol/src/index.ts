@@ -122,11 +122,10 @@ const playerJoinSchema = z.object({
       message: "name and participantType are required for a new player"
     })
   }
-  if (!event.resumeToken && event.participantType === "agent"
-    && (!event.identityToken || !event.agent)) {
+  if (!event.resumeToken && Boolean(event.identityToken) !== Boolean(event.agent)) {
     context.addIssue({
       code: "custom",
-      message: "identityToken and agent metadata are required for an agent player"
+      message: "identityToken and agent metadata must be provided together"
     })
   }
 })

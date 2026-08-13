@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   createClaudePlayer,
   createCodexPlayer,
+  createOpenRouterPlayer,
   parseDecisionOutput,
   type AgentOptions,
   type CommandRunner
@@ -86,5 +87,39 @@ describe("CLI agents", () => {
     await expect(chooseMove(context)).resolves.toEqual({ from: "e2", to: "e4" })
     expect(runner).toHaveBeenCalledTimes(2)
     expect(runner.mock.calls[1]?.[2].input).toContain("Model selected an illegal move")
+  })
+
+  it("uses OpenRouter structured output with the selected model", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: '{"move":"e2e4","memory":"Develop"}' } }]
+    }), { status: 200, headers: { "content-type": "application/json" } }))
+    const chooseMove = createOpenRouterPlayer({
+      ...options,
+      model: "nvidia/nemotron-3-super-120b-a12b:free",
+      openRouterApiKey: "test-openrouter-key"
+    }, request)
+
+    await expect(chooseMove(context)).resolves.toEqual({ from: "e2", to: "e4" })
+    expect(request).toHaveBeenCalledTimes(1)
+    const [url, requestOptions] = request.mock.calls[0] ?? []
+    expect(url).toBe("https://openrouter.ai/api/v1/chat/completions")
+    expect(new Headers(requestOptions?.headers).get("authorization")).toBe(
+      "Bearer test-openrouter-key"
+    )
+    const body = JSON.parse(String(requestOptions?.body)) as Record<string, unknown>
+    expect(body).toMatchObject({
+      model: "nvidia/nemotron-3-super-120b-a12b:free",
+      provider: { require_parameters: true },
+      response_format: { type: "json_schema" }
+    })
+  })
+
+  it("requires an OpenRouter model and API key before connecting", () => {
+    expect(() => createOpenRouterPlayer({ ...options, model: undefined })).toThrow(
+      "OpenRouter requires --model"
+    )
+    expect(() => createOpenRouterPlayer({ ...options, model: "nvidia/test" })).toThrow(
+      "OPENROUTER_API_KEY is required"
+    )
   })
 })

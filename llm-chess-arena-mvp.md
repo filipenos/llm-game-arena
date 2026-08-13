@@ -387,7 +387,8 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
 5. Adicionar um player para provedores com API compatível com OpenAI, incluindo
    OpenRouter, e aceitar modelos Nemotron e outras famílias oferecidas pelo provedor.
    Persistir separadamente o provedor, o tipo de player e o identificador exato do
-   modelo usado em cada partida.
+   modelo usado em cada partida. Implementado após o MVP para OpenRouter, com chave
+   somente via ambiente, modelo obrigatório e saída estruturada.
 6. Permitir retomada de players CLI depois de queda ou reinício do processo. O CLI
    deve persistir o `resumeToken` recebido fora do repositório, indexado por servidor
    e sessão, e reutilizá-lo automaticamente ao executar o mesmo comando. O servidor

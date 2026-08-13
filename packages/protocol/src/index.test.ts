@@ -21,9 +21,10 @@ describe("parseClientEvent", () => {
     ["player without identity", {
       type: "connection.join", sessionId: "K7P4QX", role: "player"
     }],
-    ["agent without stable identity metadata", {
+    ["agent identity without metadata", {
       type: "connection.join", sessionId: "K7P4QX", role: "player",
-      name: "Codex", participantType: "agent"
+      name: "Codex", participantType: "agent",
+      identityToken: "stable-secret-identity-token-for-codex"
     }],
     ["invalid square", {
       type: "move.play", requestId: "move", expectedPly: 0, from: "z9", to: "e4"

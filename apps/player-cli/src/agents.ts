@@ -26,6 +26,7 @@ export interface AgentOptions {
   timeout: number
   codexCommand?: string
   claudeCommand?: string
+  openRouterApiKey?: string
 }
 
 export interface CommandRunOptions {
@@ -136,6 +137,62 @@ export function createOllamaPlayer(options: AgentOptions) {
       }
     }
     process.stderr.write("Ollama failed twice; using a random legal move.\n")
+    return randomMove(context)
+  }
+}
+
+interface OpenRouterCompletion {
+  choices?: Array<{ message?: { content?: string } }>
+}
+
+export function createOpenRouterPlayer(
+  options: AgentOptions,
+  request: typeof fetch = fetch
+) {
+  if (!options.model) throw new Error("OpenRouter requires --model")
+  if (!options.openRouterApiKey) {
+    throw new Error("OPENROUTER_API_KEY is required for OpenRouter")
+  }
+  let memory = ""
+  return async (context: TurnContext): Promise<MoveCommand> => {
+    let correction = ""
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await request("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${options.openRouterApiKey}`,
+            "content-type": "application/json",
+            "http-referer": "https://chess.filipenos.com",
+            "x-openrouter-title": "LLM Game Arena"
+          },
+          body: JSON.stringify({
+            model: options.model,
+            messages: [{ role: "user", content: chessPrompt(context, memory, correction) }],
+            temperature: 0.2,
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "chess_decision",
+                strict: true,
+                schema: decisionSchema
+              }
+            },
+            provider: { require_parameters: true }
+          }),
+          signal: AbortSignal.timeout(options.timeout)
+        })
+        if (!response.ok) throw new Error(`OpenRouter returned HTTP ${response.status}`)
+        const payload = await response.json() as OpenRouterCompletion
+        const decision = parseDecisionOutput(payload.choices?.[0]?.message?.content ?? "")
+        const move = validateDecision(decision, context)
+        memory = decision.memory
+        return move
+      } catch (error) {
+        correction = error instanceof Error ? error.message : "Invalid OpenRouter response"
+      }
+    }
+    process.stderr.write("OpenRouter failed twice; using a random legal move.\n")
     return randomMove(context)
   }
 }

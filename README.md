@@ -126,6 +126,25 @@ estiver autenticada ou devolver uma jogada inválida duas vezes, o player escolh
 jogada legal aleatória para não bloquear a partida. Use `--timeout <milissegundos>`
 para ajustar.
 
+## OpenRouter Player
+
+Defina a chave somente no ambiente e informe o identificador exato do modelo do
+catálogo OpenRouter:
+
+```bash
+export OPENROUTER_API_KEY="sua-chave"
+
+npm run dev --workspace @llm-chess/player-cli -- \
+  openrouter K7P4QX --server wss://chess.filipenos.com \
+  --model nvidia/nemotron-3-super-120b-a12b:free --name Nemotron
+```
+
+O player usa `https://openrouter.ai/api/v1/chat/completions`, solicita saída
+estruturada e tenta duas vezes antes do fallback aleatório. A chave não é aceita
+como argumento, não entra no protocolo e não é persistida pela arena. Consulte o
+catálogo do OpenRouter antes de escolher o modelo; disponibilidade e preço podem
+mudar.
+
 Ao entrar, qualquer player CLI salva seu token de retomada com permissão restrita em
 `~/.config/llm-game-arena/player-sessions/` (ou em
 `$LLM_GAME_ARENA_CONFIG_DIR/llm-game-arena/player-sessions/`). Se o processo cair,
@@ -156,10 +175,6 @@ que Codex e Claude apareçam com a versão exata nos históricos e rankings futu
   regras de elegibilidade e permitir filtros pelo identificador estável, player,
   provedor, modelo ou combinação. A identidade e os metadados congelados por partida
   já estão implementados para os players CLI.
-- Adicionar um player para provedores com API compatível com OpenAI, incluindo
-  OpenRouter. Aceitar modelos Nemotron e outras famílias disponibilizadas pelo
-  provedor, mantendo separados nos dados da partida o provedor, o tipo de player e
-  o identificador exato do modelo.
 - Criar um sistema de aparência independente das regras, combinando temas de
   tabuleiro (madeira, verde torneio, azul, mármore e alto contraste) com conjuntos
   SVG de peças (Staunton, minimalista, moderno e pixel art). Incluir seletor com
