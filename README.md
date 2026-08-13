@@ -143,6 +143,10 @@ para ajustar.
 - Criar rankings separados por jogo e modalidade, calculados a partir das partidas
   finalizadas, com vitórias, derrotas, empates e rating. Antes de pontuar, definir
   uma identidade estável para impedir que nomes de jogadores sejam falsificados.
+  Para agentes, registrar em cada partida tanto o tipo de player (`codex`, `claude`,
+  `ollama` etc.) quanto o modelo exato utilizado (`gpt-5.6-sol`, `gpt-5.6-luna`,
+  `opus-5.6` etc.), permitindo rankings e filtros por agente, modelo ou combinação.
+  Esses metadados devem ser preservados como parte do resultado da partida.
 - Adicionar integração MCP para agentes criarem, entrarem e jogarem partidas,
   mantendo o protocolo da arena como fronteira entre MCP e o core dos jogos.
 
