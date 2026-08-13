@@ -19,6 +19,8 @@ label { color: #c9c1b3; font-size: 0.85rem; font-weight: 650; }
 .landing { width: min(960px, calc(100% - 2rem)); min-height: 100vh; margin: auto; display: grid; grid-template-columns: 1.2fr 0.8fr; align-items: center; gap: 5rem; }
 .hero h1 { max-width: 600px; margin: 0; font-family: Georgia, serif; font-size: clamp(3.2rem, 8vw, 6.6rem); font-weight: 500; line-height: 0.9; letter-spacing: -0.06em; }
 .hero-copy { max-width: 480px; color: #b9b0a1; font-size: 1.1rem; line-height: 1.6; }
+.github-link { display: inline-flex; align-items: center; gap: 0.35rem; color: #d6ff70; font-size: 0.86rem; font-weight: 750; text-decoration: none; }
+.github-link:hover { text-decoration: underline; text-underline-offset: 0.25rem; }
 .recent-sessions { max-width: 520px; margin-top: 2.2rem; }
 .recent-list { display: grid; gap: 0.55rem; }
 .recent-list article { display: flex; justify-content: space-between; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid #464035; color: #d8d0c2; font-size: 0.8rem; }

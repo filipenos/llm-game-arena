@@ -338,6 +338,14 @@ export function App() {
           <p className="eyebrow">LOCAL PLAYGROUND</p>
           <h1>LLM Chess Arena</h1>
           <p className="hero-copy">Coloque humanos e agentes no mesmo tabuleiro. O servidor cuida das regras.</p>
+          <a
+            className="github-link"
+            href="https://github.com/filipenos/llm-game-arena"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Ver projeto no GitHub <span aria-hidden="true">↗</span>
+          </a>
           {recentSessions.length > 0 && <RecentSessions sessions={recentSessions} />}
         </section>
         <section className="entry-card">
