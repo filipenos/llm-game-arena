@@ -7,6 +7,12 @@ import type {
   SessionSnapshot,
   SessionSummary
 } from "@llm-chess/protocol"
+import {
+  capturedPieces,
+  pieceSymbols,
+  promotionChoices,
+  promotionSymbol
+} from "./chess-display.js"
 
 const HTTP_SERVER = import.meta.env.VITE_SERVER_URL
   ?? (import.meta.env.DEV ? "http://localhost:3001" : window.location.origin)
@@ -376,6 +382,7 @@ export function App() {
   const mine = snapshot
     ? [snapshot.session.white, snapshot.session.black].find(player => player?.id === participantId)
     : undefined
+  const moves = snapshot?.game?.moves ?? []
   return (
     <main className="arena-page">
       <header className="topbar">
@@ -392,9 +399,17 @@ export function App() {
       {error && <p className="error banner">{error}</p>}
       <section className="arena-layout">
         <aside className="players-panel">
-          <PlayerCard label="PRETAS" player={snapshot?.session.black ?? null} />
+          <PlayerCard
+            label="PRETAS"
+            player={snapshot?.session.black ?? null}
+            captures={capturedPieces(moves, "black")}
+          />
           <div className="versus">VS</div>
-          <PlayerCard label="BRANCAS" player={snapshot?.session.white ?? null} />
+          <PlayerCard
+            label="BRANCAS"
+            player={snapshot?.session.white ?? null}
+            captures={capturedPieces(moves, "white")}
+          />
           {snapshot?.session.status !== "playing" && snapshot?.session.status !== "finished" && (
             <div className="lobby-actions">
               {controllerToken && (
@@ -487,7 +502,15 @@ function InviteHelp({ sessionId }: { sessionId: string }) {
   )
 }
 
-function PlayerCard({ label, player }: { label: string; player: PublicParticipant | null }) {
+function PlayerCard({
+  label,
+  player,
+  captures
+}: {
+  label: string
+  player: PublicParticipant | null
+  captures: string[]
+}) {
   return (
     <article className="player-card">
       <p className="eyebrow">{label}</p>
@@ -496,6 +519,14 @@ function PlayerCard({ label, player }: { label: string; player: PublicParticipan
         <span className={player?.connected ? "dot online" : "dot"} />
         {player ? `${player.connected ? "Conectado" : "Desconectado"} · ${player.activity}` : "Assento livre"}
       </p>
+      <div className="captured-pieces" aria-label={`Peças capturadas por ${player?.name ?? label}`}>
+        <span>Capturadas</span>
+        {captures.length > 0 ? (
+          <div>{captures.map((piece, index) => (
+            <i key={`${piece}-${index}`} title="Peça capturada">{pieceSymbols[piece]}</i>
+          ))}</div>
+        ) : <small>Nenhuma</small>}
+      </div>
     </article>
   )
 }
@@ -536,11 +567,6 @@ function GameStatus({
   return <p className="game-status">Vez das {snapshot.game.turn === "white" ? "brancas" : "pretas"}</p>
 }
 
-const pieceSymbols: Record<string, string> = {
-  K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙",
-  k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟"
-}
-
 function parseFen(fen?: string): Map<string, string> {
   const board = new Map<string, string>()
   const position = (fen ?? "8/8/8/8/8/8/8/8").split(" ")[0] ?? ""
@@ -575,6 +601,11 @@ function ChessBoard({
 }) {
   const pieces = useMemo(() => parseFen(fen), [fen])
   const [dragFrom, setDragFrom] = useState<string>()
+  const [pendingPromotion, setPendingPromotion] = useState<{
+    from: string
+    to: string
+    color: Color
+  }>()
   const legalOrigins = useMemo(
     () => new Set(legalMoves.map(move => move.slice(0, 2))),
     [legalMoves]
@@ -582,8 +613,18 @@ function ChessBoard({
   const files = orientation === "white" ? ["a", "b", "c", "d", "e", "f", "g", "h"] : ["h", "g", "f", "e", "d", "c", "b", "a"]
   const ranks = orientation === "white" ? [8, 7, 6, 5, 4, 3, 2, 1] : [1, 2, 3, 4, 5, 6, 7, 8]
 
+  useEffect(() => {
+    if (!pendingPromotion) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPendingPromotion(undefined)
+    }
+    window.addEventListener("keydown", closeOnEscape)
+    return () => window.removeEventListener("keydown", closeOnEscape)
+  }, [pendingPromotion])
+
   return (
-    <div className={`chessboard ${enabled ? "enabled" : ""}`} aria-label="Tabuleiro de xadrez">
+    <>
+      <div className={`chessboard ${enabled ? "enabled" : ""}`} aria-label="Tabuleiro de xadrez">
       {ranks.flatMap((rank, rankIndex) => files.map((file, fileIndex) => {
         const square = `${file}${rank}`
         const piece = pieces.get(square)
@@ -609,13 +650,17 @@ function ChessBoard({
                 return
               }
               const movingPiece = pieces.get(from)
-              let promotion: Promotion | undefined
               if (movingPiece?.toLowerCase() === "p" && (rank === 1 || rank === 8)) {
-                const choice = window.prompt("Promoção: q, r, b ou n", "q")?.toLowerCase()
-                promotion = choice === "r" || choice === "b" || choice === "n" ? choice : "q"
+                setDragFrom(undefined)
+                setPendingPromotion({
+                  from,
+                  to: square,
+                  color: movingPiece === movingPiece.toUpperCase() ? "white" : "black"
+                })
+                return
               }
               setDragFrom(undefined)
-              onMove(from, square, promotion)
+              onMove(from, square)
             }}
           >
             {piece && (
@@ -636,7 +681,44 @@ function ChessBoard({
           </div>
         )
       }))}
-    </div>
+      </div>
+      {pendingPromotion && (
+        <div className="promotion-backdrop" role="presentation">
+          <section
+            className="promotion-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="promotion-title"
+          >
+            <p className="eyebrow">PROMOÇÃO</p>
+            <h2 id="promotion-title">Escolha sua nova peça</h2>
+            <div className="promotion-options">
+              {promotionChoices.map(choice => (
+                <button
+                  key={choice.value}
+                  type="button"
+                  aria-label={`Promover para ${choice.label}`}
+                  onClick={() => {
+                    onMove(pendingPromotion.from, pendingPromotion.to, choice.value)
+                    setPendingPromotion(undefined)
+                  }}
+                >
+                  <span>{promotionSymbol(choice.piece, pendingPromotion.color)}</span>
+                  <small>{choice.label}</small>
+                </button>
+              ))}
+            </div>
+            <button
+              className="text-button promotion-cancel"
+              type="button"
+              onClick={() => setPendingPromotion(undefined)}
+            >
+              Cancelar
+            </button>
+          </section>
+        </div>
+      )}
+    </>
   )
 }
 

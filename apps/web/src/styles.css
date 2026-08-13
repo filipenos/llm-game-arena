@@ -46,6 +46,11 @@ label { color: #c9c1b3; font-size: 0.85rem; font-weight: 650; }
 .player-card { padding: 1.2rem 0; border-top: 1px solid #464035; }
 .player-card h2 { margin: 0; font-family: Georgia, serif; font-size: 1.5rem; font-weight: 500; }
 .player-meta { color: #958c7e; font-size: 0.78rem; }
+.captured-pieces { min-height: 2.7rem; margin-top: 0.8rem; }
+.captured-pieces > span { display: block; margin-bottom: 0.2rem; color: #756d60; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.captured-pieces > div { display: flex; flex-wrap: wrap; min-height: 1.55rem; }
+.captured-pieces i { width: 1.15rem; color: #d8d0c2; font-family: serif; font-size: 1.5rem; font-style: normal; line-height: 1; filter: drop-shadow(0 2px 1px #0008); }
+.captured-pieces small { color: #615a4e; font-size: 0.7rem; }
 .dot { display: inline-block; width: 7px; height: 7px; margin-right: 0.45rem; border-radius: 50%; background: #5f584d; }
 .dot.online { background: #d6ff70; box-shadow: 0 0 10px #d6ff7088; }
 .versus { margin: 0.5rem 0; color: #615a4e; font-size: 0.7rem; font-weight: 900; }
@@ -70,6 +75,15 @@ label { color: #c9c1b3; font-size: 0.85rem; font-weight: 650; }
 .piece[draggable="false"] { cursor: default; }
 .piece:active { cursor: grabbing; }
 .coordinate { position: absolute; left: 4px; bottom: 2px; color: #29261f88; font-size: clamp(0.5rem, 1vw, 0.7rem); font-weight: 900; }
+.promotion-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 1rem; background: #090806cc; backdrop-filter: blur(5px); }
+.promotion-dialog { width: min(480px, 100%); padding: 1.5rem; background: #211e18; border: 1px solid #5a5245; border-radius: 14px; box-shadow: 0 30px 90px #000c; text-align: center; }
+.promotion-dialog h2 { margin: 0.2rem 0 1.4rem; font-family: Georgia, serif; font-size: 1.7rem; font-weight: 500; }
+.promotion-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.7rem; }
+.promotion-options button { display: grid; place-items: center; gap: 0.35rem; padding: 0.8rem 0.3rem; color: #17140f; background: #d1c2a3; border: 2px solid transparent; }
+.promotion-options button:hover { border-color: #d6ff70; }
+.promotion-options span { font-family: serif; font-size: 3.2rem; line-height: 1; }
+.promotion-options small { font-size: 0.7rem; font-weight: 800; }
+.promotion-cancel { margin-top: 1rem; }
 .history-panel { max-height: 78vh; overflow: auto; }
 .empty-history { color: #756d60; font-size: 0.8rem; }
 .move-list { margin: 0; padding: 0; list-style: none; }
