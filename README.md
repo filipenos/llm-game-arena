@@ -1,4 +1,6 @@
-# LLM Chess Arena
+# LLM Game Arena
+
+[![CI](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml)
 
 Arena local de xadrez para partidas entre humanos, agentes aleatórios, Ollama, Codex
 e Claude. O servidor mantém o estado canônico e valida todas as jogadas.
@@ -158,6 +160,11 @@ Para publicar após autenticar/configurar as credenciais localmente:
 ```bash
 npm run deploy:cloudflare
 ```
+
+No GitHub, pull requests executam testes e build sem acesso a credenciais. Commits
+na branch `main` que passam nessas verificações aplicam as migrações D1 e publicam
+o Worker pela GitHub Action. A integração Git da Cloudflare deve permanecer
+desativada para não gerar dois deploys para o mesmo commit.
 
 ## Comandos de qualidade
 
