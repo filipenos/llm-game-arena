@@ -18,7 +18,7 @@ npm install
 npm run dev
 ```
 
-Abra `http://localhost:3000`. O servidor HTTP/WebSocket usa a porta `3001`.
+Abra `http://localhost:6464`. O servidor HTTP/WebSocket usa a porta `3001`.
 
 Na tela inicial, escolha entrar como humano ou espectador. Humanos podem solicitar
 brancas ou pretas, ou deixar a cor aleatória. Sem uma cor explícita, o servidor
