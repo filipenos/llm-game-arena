@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { PlayerClient } from "@llm-chess/player-sdk"
+import { AgentIdentityStore, PlayerClient } from "@llm-chess/player-sdk"
 import type { AgentMetadata, Color, ServerEvent } from "@llm-chess/protocol"
 import {
   createClaudePlayer,
@@ -8,7 +8,7 @@ import {
   createOpenRouterPlayer,
   randomMove
 } from "./agents.js"
-import { AgentIdentityStore, ResumeStore, type ResumeIdentity } from "./resume-store.js"
+import { ResumeStore, type ResumeIdentity } from "./resume-store.js"
 
 interface CliOptions {
   mode: "random" | "ollama" | "codex" | "claude" | "openrouter"

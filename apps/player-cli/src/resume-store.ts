@@ -6,7 +6,7 @@ import {
   renameSync,
   writeFileSync
 } from "node:fs"
-import { createHash, randomBytes as secureRandomBytes } from "node:crypto"
+import { createHash } from "node:crypto"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Color } from "@llm-chess/protocol"
@@ -57,59 +57,6 @@ export function defaultResumeStoreDirectory(
     || environment.XDG_CONFIG_HOME?.trim()
     || join(userHome, ".config")
   return join(configuredDirectory, "llm-game-arena", "player-sessions")
-}
-
-export function defaultIdentityStoreDirectory(
-  environment: NodeJS.ProcessEnv = process.env,
-  userHome = homedir()
-): string {
-  return join(
-    environment.LLM_GAME_ARENA_CONFIG_DIR?.trim()
-      || environment.XDG_CONFIG_HOME?.trim()
-      || join(userHome, ".config"),
-    "llm-game-arena",
-    "agent-identities"
-  )
-}
-
-export interface AgentIdentity {
-  server: string
-  mode: string
-  name: string
-}
-
-export class AgentIdentityStore {
-  constructor(private readonly directoryPath = defaultIdentityStoreDirectory()) {}
-
-  getOrCreate(identity: AgentIdentity): string {
-    mkdirSync(this.directoryPath, { recursive: true, mode: 0o700 })
-    chmodSync(this.directoryPath, 0o700)
-    const filePath = this.recordPath(identity)
-    try {
-      return tokenSchema.parse(readFileSync(filePath, "utf8").trim())
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
-    }
-
-    const token = Buffer.from(secureRandomBytes(32)).toString("base64url")
-    try {
-      writeFileSync(filePath, `${token}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 })
-      chmodSync(filePath, 0o600)
-      return token
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
-      return tokenSchema.parse(readFileSync(filePath, "utf8").trim())
-    }
-  }
-
-  private recordPath(identity: AgentIdentity): string {
-    const key = JSON.stringify([
-      normalizedServerOrigin(identity.server),
-      identity.mode,
-      identity.name
-    ])
-    return join(this.directoryPath, `${createHash("sha256").update(key).digest("hex")}.token`)
-  }
 }
 
 export function resumeIdentityKey(identity: ResumeIdentity): string {

@@ -10,6 +10,12 @@ import type {
 import { parseUci } from "@llm-chess/protocol"
 import WebSocket from "ws"
 
+export {
+  AgentIdentityStore,
+  defaultIdentityStoreDirectory,
+  type AgentIdentity
+} from "./identity-store.js"
+
 export interface TurnContext {
   gameId: string
   fen: string
@@ -28,6 +34,7 @@ export interface PlayerClientOptions {
   resumeToken?: string
   identityToken?: string
   agent?: AgentMetadata
+  manual?: boolean
 }
 
 type TurnHandler = (context: TurnContext) => Promise<MoveCommand> | MoveCommand
@@ -97,6 +104,17 @@ export class PlayerClient {
     this.send({ type: "game.resign" })
   }
 
+  playMove(command: MoveCommand, expectedPly: number): void {
+    if (!this.accepted) throw new Error("Player is not connected")
+    this.send({ type: "player.status", status: "decided" })
+    this.send({
+      type: "move.play",
+      requestId: randomUUID(),
+      expectedPly,
+      ...command
+    })
+  }
+
   close(): void {
     this.socket?.close()
   }
@@ -123,7 +141,7 @@ export class PlayerClient {
       this.socket?.close()
       return
     }
-    if (event.type === "turn.started") void this.playTurn(event)
+    if (event.type === "turn.started" && !this.options.manual) void this.playTurn(event)
   }
 
   private async playTurn(event: Extract<ServerEvent, { type: "turn.started" }>): Promise<void> {

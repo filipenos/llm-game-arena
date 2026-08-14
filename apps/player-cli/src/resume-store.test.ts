@@ -2,9 +2,9 @@ import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
+import { AgentIdentityStore } from "@llm-chess/player-sdk"
 import {
   defaultResumeStoreDirectory,
-  AgentIdentityStore,
   ResumeStore,
   resumeIdentityKey,
   type ResumeIdentity
