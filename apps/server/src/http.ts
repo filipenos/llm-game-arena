@@ -1,8 +1,9 @@
 import cors from "cors"
 import express, { type ErrorRequestHandler } from "express"
-import { sessionIdSchema } from "@llm-chess/protocol"
+import { leaderboardGroupSchema, sessionIdSchema } from "@llm-chess/protocol"
 import type { ArenaService } from "./arena-service.js"
 import { DomainError } from "./domain.js"
+import { calculateLeaderboard, type RankedMatch } from "./leaderboard.js"
 
 function bearerToken(value: string | undefined): string {
   const match = /^Bearer (.+)$/.exec(value ?? "")
@@ -58,6 +59,31 @@ export function createHttpApp(arena: ArenaService) {
       }
     })
     response.json({ sessions })
+  })
+
+  app.get("/api/leaderboard", (request, response) => {
+    const groupResult = leaderboardGroupSchema.safeParse(request.query.groupBy ?? "model")
+    const gameType = typeof request.query.gameType === "string" ? request.query.gameType : "chess"
+    const requestedLimit = Number(request.query.limit ?? 20)
+    if (!groupResult.success || !/^[a-z][a-z0-9-]{0,39}$/.test(gameType)
+      || !Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 100) {
+      throw new DomainError("INVALID_MESSAGE", "Invalid leaderboard query")
+    }
+    const matches: RankedMatch[] = arena.sessions.listSessions("finished").map(session => ({
+      gameType: session.gameType,
+      winner: session.game?.getOutcome()?.winner ?? null,
+      white: {
+        identityId: session.white?.identityId,
+        name: session.white?.name,
+        agent: session.white?.agent
+      },
+      black: {
+        identityId: session.black?.identityId,
+        name: session.black?.name,
+        agent: session.black?.agent
+      }
+    }))
+    response.json(calculateLeaderboard(matches, gameType, groupResult.data, requestedLimit))
   })
 
   app.get("/api/sessions/:sessionId", (request, response) => {

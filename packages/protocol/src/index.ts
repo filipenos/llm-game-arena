@@ -21,6 +21,8 @@ export type SessionStatus = z.infer<typeof sessionStatusSchema>
 export type PlayerActivity = z.infer<typeof activitySchema>
 export type Promotion = z.infer<typeof promotionSchema>
 export type AgentMetadata = z.infer<typeof agentMetadataSchema>
+export const leaderboardGroupSchema = z.enum(["identity", "player", "provider", "model"])
+export type LeaderboardGroup = z.infer<typeof leaderboardGroupSchema>
 
 export const moveCommandSchema = z.object({
   from: squareSchema,
@@ -103,6 +105,26 @@ export interface SessionSummary {
   ply: number
   createdAt?: string
   updatedAt?: string
+}
+
+export interface LeaderboardEntry {
+  rank: number
+  key: string
+  label: string
+  rating: number
+  games: number
+  wins: number
+  draws: number
+  losses: number
+  agent?: AgentMetadata
+}
+
+export interface LeaderboardResponse {
+  gameType: string
+  groupBy: LeaderboardGroup
+  eligibleGames: number
+  truncated: boolean
+  entries: LeaderboardEntry[]
 }
 
 const playerJoinSchema = z.object({

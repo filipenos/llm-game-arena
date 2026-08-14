@@ -3,6 +3,7 @@
 import { DurableObject } from "cloudflare:workers"
 import {
   parseClientEvent,
+  leaderboardGroupSchema,
   sessionIdSchema,
   type AgentMetadata,
   type ServerEvent
@@ -13,6 +14,7 @@ import {
   type EventSink
 } from "../../server/src/arena-service.js"
 import { DomainError } from "../../server/src/domain.js"
+import { calculateLeaderboard, type RankedMatch } from "../../server/src/leaderboard.js"
 import {
   SessionManager,
   type PersistedSession,
@@ -21,6 +23,7 @@ import {
 
 const SESSION_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const MAX_MESSAGE_SIZE = 16 * 1024
+const MAX_RANKED_MATCHES = 10_000
 
 interface Env {
   ASSETS: Fetcher
@@ -160,6 +163,54 @@ async function listSessions(request: Request, env: Env): Promise<Response> {
   })
 }
 
+async function leaderboard(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url)
+  const groupResult = leaderboardGroupSchema.safeParse(url.searchParams.get("groupBy") ?? "model")
+  const gameType = url.searchParams.get("gameType") ?? "chess"
+  const requestedLimit = Number(url.searchParams.get("limit") ?? 20)
+  if (!groupResult.success || !/^[a-z][a-z0-9-]{0,39}$/.test(gameType)
+    || !Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 100) {
+    throw new DomainError("INVALID_MESSAGE", "Invalid leaderboard query")
+  }
+
+  const result = await env.DB.prepare(
+    `SELECT id, game_type, winner, white_name, black_name,
+      white_identity_id, white_player, white_provider, white_model,
+      black_identity_id, black_player, black_provider, black_model
+    FROM sessions
+    WHERE status = 'finished' AND game_type = ?
+    ORDER BY updated_at ASC, id ASC
+    LIMIT ?`
+  ).bind(gameType, MAX_RANKED_MATCHES + 1).all<SessionIndexRow>()
+  const truncated = result.results.length > MAX_RANKED_MATCHES
+  const matches: RankedMatch[] = result.results.slice(0, MAX_RANKED_MATCHES).map(row => ({
+    gameType: row.game_type,
+    winner: row.winner === "white" || row.winner === "black" ? row.winner : null,
+    white: {
+      identityId: row.white_identity_id,
+      name: row.white_name,
+      agent: row.white_player && row.white_provider ? {
+        player: row.white_player,
+        provider: row.white_provider,
+        ...(row.white_model ? { model: row.white_model } : {})
+      } : null
+    },
+    black: {
+      identityId: row.black_identity_id,
+      name: row.black_name,
+      agent: row.black_player && row.black_provider ? {
+        player: row.black_player,
+        provider: row.black_provider,
+        ...(row.black_model ? { model: row.black_model } : {})
+      } : null
+    }
+  }))
+  return json({
+    ...calculateLeaderboard(matches, gameType, groupResult.data, requestedLimit),
+    truncated
+  })
+}
+
 async function routeApi(request: Request, env: Env): Promise<Response | undefined> {
   const url = new URL(request.url)
   if (url.pathname === "/api/sessions" && request.method === "POST") {
@@ -167,6 +218,9 @@ async function routeApi(request: Request, env: Env): Promise<Response | undefine
   }
   if (url.pathname === "/api/sessions" && request.method === "GET") {
     return await listSessions(request, env)
+  }
+  if (url.pathname === "/api/leaderboard" && request.method === "GET") {
+    return await leaderboard(request, env)
   }
 
   const match = /^\/api\/sessions\/([^/]+)(\/start)?$/.exec(url.pathname)

@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml)
 
-Arena local de xadrez para partidas entre humanos, agentes aleatórios, Ollama, Codex
-e Claude. O servidor mantém o estado canônico e valida todas as jogadas.
+Arena local de xadrez para partidas entre humanos, agentes aleatórios, Ollama, Codex,
+Claude e OpenRouter. O servidor mantém o estado canônico e valida todas as jogadas.
 
 ## Requisitos
 
@@ -156,6 +156,21 @@ nome. O servidor deriva dela um identificador público sem persistir o segredo. 
 partida congela o tipo de player, o provedor e o modelo informado; use `--model` para
 que Codex e Claude apareçam com a versão exata nos históricos e rankings futuros.
 
+## Ranking
+
+A home mostra o ranking dos modelos. O rating começa em 1200 e usa Elo com fator K
+32, processando as partidas finalizadas em ordem cronológica. São elegíveis somente
+partidas entre dois agentes com identidade e metadados completos; confrontos dentro
+do mesmo agrupamento não alteram o ranking.
+
+A API permite agrupar por `identity`, `player`, `provider` ou `model`:
+
+```bash
+curl 'https://chess.filipenos.com/api/leaderboard?gameType=chess&groupBy=model&limit=20'
+```
+
+O servidor local oferece a mesma rota usando apenas as partidas mantidas em memória.
+
 ## Estado e limitações
 
 - O servidor Node local mantém sessões somente em memória.
@@ -170,11 +185,9 @@ que Codex e Claude apareçam com a versão exata nos históricos e rankings futu
 ## Roadmap
 
 - Adicionar adaptadores para outros jogos sobre o core genérico.
-- Criar rankings separados por jogo e modalidade, calculados a partir das partidas
-  finalizadas, com vitórias, derrotas, empates e rating. Antes de pontuar, definir
-  regras de elegibilidade e permitir filtros pelo identificador estável, player,
-  provedor, modelo ou combinação. A identidade e os metadados congelados por partida
-  já estão implementados para os players CLI.
+- Evoluir o ranking inicial por jogo e agrupamento (`identity`, `player`, `provider`
+  e `model`) com proteção contra abuso, paginação e materialização quando o volume
+  ultrapassar o cálculo cronológico sob demanda.
 - Criar um sistema de aparência independente das regras, combinando temas de
   tabuleiro (madeira, verde torneio, azul, mármore e alto contraste) com conjuntos
   SVG de peças (Staunton, minimalista, moderno e pixel art). Incluir seletor com

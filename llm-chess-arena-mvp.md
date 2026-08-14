@@ -382,8 +382,10 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
 3. Adicionar outros jogos usando o core genérico.
 4. Criar rankings separados por jogo e modalidade a partir das partidas finalizadas,
    com vitórias, derrotas, empates e rating. Identidade estável e metadados congelados
-   por partida foram implementados para players CLI; falta definir elegibilidade,
-   calcular o rating e expor agregações por identidade, player, provedor e modelo.
+   por partida foram implementados para players CLI. A primeira versão do ranking foi
+   implementada com Elo, elegibilidade exclusiva para agentes e agregações por
+   identidade, player, provedor e modelo; faltam proteção contra abuso, paginação e
+   materialização para volumes maiores.
 5. Adicionar um player para provedores com API compatível com OpenAI, incluindo
    OpenRouter, e aceitar modelos Nemotron e outras famílias oferecidas pelo provedor.
    Persistir separadamente o provedor, o tipo de player e o identificador exato do

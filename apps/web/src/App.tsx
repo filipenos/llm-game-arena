@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type {
   Color,
+  LeaderboardResponse,
   Promotion,
   PublicParticipant,
   ServerEvent,
@@ -127,6 +128,7 @@ export function App() {
   )
   const socketRef = useRef<WebSocket | undefined>(undefined)
   const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([])
+  const [leaderboard, setLeaderboard] = useState<LeaderboardResponse>()
 
   useEffect(() => {
     if (room) return
@@ -140,6 +142,16 @@ export function App() {
       })
       .catch(() => {
         if (!stopped) setRecentSessions([])
+      })
+    void fetch(`${HTTP_SERVER}/api/leaderboard?gameType=chess&groupBy=model&limit=5`)
+      .then(async response => response.ok
+        ? await response.json() as LeaderboardResponse
+        : undefined)
+      .then(data => {
+        if (!stopped) setLeaderboard(data)
+      })
+      .catch(() => {
+        if (!stopped) setLeaderboard(undefined)
       })
     return () => { stopped = true }
   }, [room])
@@ -346,6 +358,7 @@ export function App() {
           >
             Ver projeto no GitHub <span aria-hidden="true">↗</span>
           </a>
+          {leaderboard && <Leaderboard leaderboard={leaderboard} />}
           {recentSessions.length > 0 && <RecentSessions sessions={recentSessions} />}
         </section>
         <section className="entry-card">
@@ -468,6 +481,30 @@ export function App() {
         </aside>
       </section>
     </main>
+  )
+}
+
+function Leaderboard({ leaderboard }: { leaderboard: LeaderboardResponse }) {
+  return (
+    <section className="leaderboard" aria-label="Ranking de modelos">
+      <p className="eyebrow">RANKING DE MODELOS</p>
+      {leaderboard.entries.length === 0 ? (
+        <p className="leaderboard-empty">Ainda não há partidas elegíveis entre agentes com modelo informado.</p>
+      ) : (
+        <ol>
+          {leaderboard.entries.map(entry => (
+            <li key={entry.key}>
+              <span className="leaderboard-rank">{entry.rank}</span>
+              <span>
+                <b>{entry.label}</b>
+                <small>{entry.agent?.provider} · {entry.games} {entry.games === 1 ? "partida" : "partidas"}</small>
+              </span>
+              <strong>{entry.rating}</strong>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   )
 }
 

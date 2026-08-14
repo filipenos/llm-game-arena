@@ -89,4 +89,52 @@ describe("HTTP API", () => {
     expect(missingResponse.status).toBe(404)
     await expect(missingResponse.json()).resolves.toMatchObject({ code: "SESSION_NOT_FOUND" })
   })
+
+  it("serves model rankings from eligible finished agent matches", async () => {
+    const arena = new ArenaService()
+    const session = arena.sessions.createSession()
+    const white = arena.sessions.joinPlayer(session.id, {
+      connectionId: "codex",
+      name: "Codex",
+      type: "agent",
+      requestedColor: "white",
+      identityToken: "codex-identity-token-1234567890",
+      agent: { player: "codex", provider: "openai", model: "gpt-5.6-sol" }
+    }).participant
+    const black = arena.sessions.joinPlayer(session.id, {
+      connectionId: "claude",
+      name: "Claude",
+      type: "agent",
+      requestedColor: "black",
+      identityToken: "claude-identity-token-123456789",
+      agent: { player: "claude", provider: "anthropic", model: "opus-5.6" }
+    }).participant
+    arena.sessions.markReady(session, white)
+    arena.sessions.markReady(session, black)
+    arena.startSession(session.id, session.controllerToken)
+    session.game?.resign("black")
+    session.status = "finished"
+
+    const baseUrl = await startHttpServer(arena)
+    const response = await fetch(`${baseUrl}/api/leaderboard?groupBy=model`)
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      gameType: "chess",
+      groupBy: "model",
+      eligibleGames: 1,
+      entries: [
+        { rank: 1, label: "gpt-5.6-sol", rating: 1216, wins: 1 },
+        { rank: 2, label: "opus-5.6", rating: 1184, losses: 1 }
+      ]
+    })
+  })
+
+  it("rejects invalid leaderboard queries", async () => {
+    const baseUrl = await startHttpServer(new ArenaService())
+    const response = await fetch(`${baseUrl}/api/leaderboard?groupBy=unknown`)
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({ code: "INVALID_MESSAGE" })
+  })
 })

@@ -21,6 +21,15 @@ label { color: #c9c1b3; font-size: 0.85rem; font-weight: 650; }
 .hero-copy { max-width: 480px; color: #b9b0a1; font-size: 1.1rem; line-height: 1.6; }
 .github-link { display: inline-flex; align-items: center; gap: 0.35rem; color: #d6ff70; font-size: 0.86rem; font-weight: 750; text-decoration: none; }
 .github-link:hover { text-decoration: underline; text-underline-offset: 0.25rem; }
+.leaderboard { max-width: 520px; margin-top: 2.2rem; }
+.leaderboard ol { margin: 0; padding: 0; list-style: none; }
+.leaderboard li { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto; align-items: center; gap: 0.65rem; padding: 0.65rem 0; border-top: 1px solid #464035; }
+.leaderboard-rank { color: #756d60; font-family: Georgia, serif; font-size: 1.1rem; }
+.leaderboard li > span:nth-child(2) { min-width: 0; }
+.leaderboard b { display: block; overflow: hidden; color: #d8d0c2; font-size: 0.84rem; text-overflow: ellipsis; white-space: nowrap; }
+.leaderboard small { display: block; margin-top: 0.15rem; color: #958c7e; font-size: 0.68rem; }
+.leaderboard strong { color: #d6ff70; font-size: 0.9rem; }
+.leaderboard-empty { color: #958c7e; font-size: 0.78rem; line-height: 1.5; }
 .recent-sessions { max-width: 520px; margin-top: 2.2rem; }
 .recent-list { display: grid; gap: 0.55rem; }
 .recent-list article { display: flex; justify-content: space-between; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid #464035; color: #d8d0c2; font-size: 0.8rem; }
