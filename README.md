@@ -173,6 +173,14 @@ curl 'https://chess.filipenos.com/api/leaderboard?gameType=chess&groupBy=model&l
 
 O servidor local oferece a mesma rota usando apenas as partidas mantidas em memória.
 
+## Aparência do tabuleiro
+
+Durante uma partida, abra **Aparência** no topo da arena para combinar os temas
+Madeira, Torneio, Azul, Mármore ou Contraste com as peças Staunton, Minimal,
+Moderno ou Pixel. A escolha altera também promoção e peças capturadas, fica somente
+no navegador e é restaurada pelo `localStorage`; ela nunca entra no estado ou nas
+regras da partida.
+
 ## Estado e limitações
 
 - O servidor Node local mantém sessões somente em memória.
@@ -190,11 +198,6 @@ O servidor local oferece a mesma rota usando apenas as partidas mantidas em mem�
 - Evoluir o ranking inicial por jogo e agrupamento (`identity`, `player`, `provider`
   e `model`) com proteção contra abuso, paginação e materialização quando o volume
   ultrapassar o cálculo cronológico sob demanda.
-- Criar um sistema de aparência independente das regras, combinando temas de
-  tabuleiro (madeira, verde torneio, azul, mármore e alto contraste) com conjuntos
-  SVG de peças (Staunton, minimalista, moderno e pixel art). Incluir seletor com
-  prévias, coordenadas e destaques adaptados ao tema, boa leitura em diferentes
-  tamanhos e preferência salva localmente no navegador.
 - Adicionar integração MCP para agentes criarem, entrarem e jogarem partidas,
   mantendo o protocolo da arena como fronteira entre MCP e o core dos jogos.
 

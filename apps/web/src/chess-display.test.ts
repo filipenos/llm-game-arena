@@ -1,6 +1,6 @@
 import type { ChessMove } from "@llm-chess/protocol"
 import { describe, expect, it } from "vitest"
-import { capturedPieces, promotionSymbol } from "./chess-display.js"
+import { capturedPieces, pieceSymbol, promotionSymbol } from "./chess-display.js"
 
 const moves = [
   { color: "white", captured: "p" },
@@ -18,5 +18,12 @@ describe("chess display helpers", () => {
   it("uses the promoting pawn color for promotion icons", () => {
     expect(promotionSymbol("q", "white")).toBe("♕")
     expect(promotionSymbol("q", "black")).toBe("♛")
+  })
+
+  it("uses chess glyphs or letters according to the selected piece set", () => {
+    expect(pieceSymbol("N", "staunton")).toBe("♘")
+    expect(pieceSymbol("n", "modern")).toBe("♞")
+    expect(pieceSymbol("n", "minimal")).toBe("N")
+    expect(pieceSymbol("N", "pixel")).toBe("N")
   })
 })

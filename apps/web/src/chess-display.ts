@@ -1,8 +1,20 @@
 import type { ChessMove, Color, Promotion } from "@llm-chess/protocol"
+import type { PieceSet } from "./appearance.js"
 
 export const pieceSymbols: Record<string, string> = {
   K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙",
   k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟"
+}
+
+const pieceLetters: Record<string, string> = {
+  K: "K", Q: "Q", R: "R", B: "B", N: "N", P: "P",
+  k: "K", q: "Q", r: "R", b: "B", n: "N", p: "P"
+}
+
+export function pieceSymbol(piece: string, set: PieceSet): string {
+  return set === "staunton" || set === "modern"
+    ? pieceSymbols[piece] ?? ""
+    : pieceLetters[piece] ?? ""
 }
 
 export const promotionChoices: Array<{
@@ -24,7 +36,7 @@ export function capturedPieces(moves: ChessMove[], captor: Color): string[] {
   })
 }
 
-export function promotionSymbol(piece: string, color: Color): string {
+export function promotionSymbol(piece: string, color: Color, set: PieceSet = "staunton"): string {
   const key = color === "white" ? piece.toUpperCase() : piece.toLowerCase()
-  return pieceSymbols[key] ?? ""
+  return pieceSymbol(key, set)
 }

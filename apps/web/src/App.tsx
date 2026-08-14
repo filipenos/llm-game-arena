@@ -10,10 +10,19 @@ import type {
 } from "@llm-chess/protocol"
 import {
   capturedPieces,
-  pieceSymbols,
+  pieceSymbol,
   promotionChoices,
   promotionSymbol
 } from "./chess-display.js"
+import {
+  boardThemes,
+  loadAppearance,
+  pieceSets,
+  saveAppearance,
+  type BoardAppearance,
+  type BoardTheme,
+  type PieceSet
+} from "./appearance.js"
 
 const HTTP_SERVER = import.meta.env.VITE_SERVER_URL ?? window.location.origin
 const WS_SERVER = HTTP_SERVER.replace(/^http/, "ws")
@@ -128,6 +137,12 @@ export function App() {
   const socketRef = useRef<WebSocket | undefined>(undefined)
   const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderboardResponse>()
+  const [appearance, setAppearance] = useState(loadAppearance)
+
+  function updateAppearance(next: BoardAppearance): void {
+    setAppearance(next)
+    saveAppearance(next)
+  }
 
   useEffect(() => {
     if (room) return
@@ -419,6 +434,7 @@ export function App() {
           <h1>{room.sessionId}</h1>
         </div>
         <div className="topbar-actions">
+          <AppearanceControl appearance={appearance} onChange={updateAppearance} />
           <span className={connected ? "connection online" : "connection"}>{connected ? "Conectado" : "Reconectando"}</span>
           <button className="text-button" onClick={leaveRoom}>Sair</button>
         </div>
@@ -431,12 +447,14 @@ export function App() {
             label="PRETAS"
             player={snapshot?.session.black ?? null}
             captures={capturedPieces(moves, "black")}
+            pieceSet={appearance.pieces}
           />
           <div className="versus">VS</div>
           <PlayerCard
             label="BRANCAS"
             player={snapshot?.session.white ?? null}
             captures={capturedPieces(moves, "white")}
+            pieceSet={appearance.pieces}
           />
           {snapshot?.session.status !== "playing" && snapshot?.session.status !== "finished" && (
             <div className="lobby-actions">
@@ -455,6 +473,8 @@ export function App() {
           <ChessBoard
             fen={snapshot?.game?.fen}
             orientation={mine?.color ?? "white"}
+            theme={appearance.theme}
+            pieceSet={appearance.pieces}
             enabled={Boolean(connected && !movePending && mine && snapshot?.game?.status === "playing" && snapshot.game.turn === mine.color)}
             legalMoves={legalMoves}
             lastMove={snapshot?.game?.moves.at(-1)}
@@ -554,14 +574,77 @@ function InviteHelp({ sessionId }: { sessionId: string }) {
   )
 }
 
+const themeLabels: Record<BoardTheme, string> = {
+  wood: "Madeira",
+  tournament: "Torneio",
+  blue: "Azul",
+  marble: "Mármore",
+  contrast: "Contraste"
+}
+
+const pieceSetLabels: Record<PieceSet, string> = {
+  staunton: "Staunton",
+  minimal: "Minimal",
+  modern: "Moderno",
+  pixel: "Pixel"
+}
+
+function AppearanceControl({
+  appearance,
+  onChange
+}: {
+  appearance: BoardAppearance
+  onChange: (appearance: BoardAppearance) => void
+}) {
+  return (
+    <details className="appearance-control">
+      <summary>Aparência</summary>
+      <div className="appearance-menu">
+        <p className="eyebrow">TABULEIRO</p>
+        <div className="appearance-options theme-options">
+          {boardThemes.map(theme => (
+            <button
+              className={`appearance-option theme-${theme}`}
+              type="button"
+              key={theme}
+              aria-pressed={appearance.theme === theme}
+              onClick={() => onChange({ ...appearance, theme })}
+            >
+              <span className="theme-preview" aria-hidden="true"><i /><i /></span>
+              <small>{themeLabels[theme]}</small>
+            </button>
+          ))}
+        </div>
+        <p className="eyebrow piece-heading">PEÇAS</p>
+        <div className="appearance-options piece-options">
+          {pieceSets.map(pieces => (
+            <button
+              className={`appearance-option piece-set-${pieces}`}
+              type="button"
+              key={pieces}
+              aria-pressed={appearance.pieces === pieces}
+              onClick={() => onChange({ ...appearance, pieces })}
+            >
+              <span className="piece-preview" aria-hidden="true">{pieceSymbol("N", pieces)}</span>
+              <small>{pieceSetLabels[pieces]}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+    </details>
+  )
+}
+
 function PlayerCard({
   label,
   player,
-  captures
+  captures,
+  pieceSet
 }: {
   label: string
   player: PublicParticipant | null
   captures: string[]
+  pieceSet: PieceSet
 }) {
   return (
     <article className="player-card">
@@ -581,7 +664,13 @@ function PlayerCard({
         <span>Capturadas</span>
         {captures.length > 0 ? (
           <div>{captures.map((piece, index) => (
-            <i key={`${piece}-${index}`} title="Peça capturada">{pieceSymbols[piece]}</i>
+            <i
+              className={`piece-set-${pieceSet} piece-${piece === piece.toUpperCase() ? "white" : "black"}`}
+              key={`${piece}-${index}`}
+              title="Peça capturada"
+            >
+              {pieceSymbol(piece, pieceSet)}
+            </i>
           ))}</div>
         ) : <small>Nenhuma</small>}
       </div>
@@ -645,6 +734,8 @@ function parseFen(fen?: string): Map<string, string> {
 function ChessBoard({
   fen,
   orientation,
+  theme,
+  pieceSet,
   enabled,
   legalMoves,
   lastMove,
@@ -652,6 +743,8 @@ function ChessBoard({
 }: {
   fen?: string
   orientation: Color
+  theme: BoardTheme
+  pieceSet: PieceSet
   enabled: boolean
   legalMoves: string[]
   lastMove?: { from: string; to: string }
@@ -703,7 +796,7 @@ function ChessBoard({
 
   return (
     <>
-      <div className={`chessboard ${enabled ? "enabled" : ""}`} aria-label="Tabuleiro de xadrez">
+      <div className={`chessboard theme-${theme} piece-set-${pieceSet} ${enabled ? "enabled" : ""}`} aria-label="Tabuleiro de xadrez">
       {ranks.flatMap((rank, rankIndex) => files.map((file, fileIndex) => {
         const square = `${file}${rank}`
         const piece = pieces.get(square)
@@ -747,8 +840,10 @@ function ChessBoard({
           >
             {piece && (
               <span
-                className="piece"
+                className={`piece piece-${piece === piece.toUpperCase() ? "white" : "black"}`}
                 draggable={canDrag}
+                role="img"
+                aria-label={`Peça ${piece === piece.toUpperCase() ? "branca" : "preta"}`}
                 onDragStart={event => {
                   suppressClickAfterDrag.current = true
                   event.dataTransfer.effectAllowed = "move"
@@ -760,7 +855,7 @@ function ChessBoard({
                   window.setTimeout(() => { suppressClickAfterDrag.current = false }, 0)
                 }}
               >
-                {pieceSymbols[piece]}
+                {pieceSymbol(piece, pieceSet)}
               </span>
             )}
             {(fileIndex === 0 || rankIndex === 7) && <span className="coordinate">{fileIndex === 0 ? rank : file}</span>}
@@ -771,7 +866,7 @@ function ChessBoard({
       {pendingPromotion && (
         <div className="promotion-backdrop" role="presentation">
           <section
-            className="promotion-dialog"
+            className={`promotion-dialog theme-${theme} piece-set-${pieceSet}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="promotion-title"
@@ -789,7 +884,9 @@ function ChessBoard({
                     setPendingPromotion(undefined)
                   }}
                 >
-                  <span>{promotionSymbol(choice.piece, pendingPromotion.color)}</span>
+                  <span className={`piece-${pendingPromotion.color}`}>
+                    {promotionSymbol(choice.piece, pendingPromotion.color, pieceSet)}
+                  </span>
                   <small>{choice.label}</small>
                 </button>
               ))}

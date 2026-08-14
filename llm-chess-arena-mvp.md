@@ -399,10 +399,10 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
    identidade do comando e removidos ao receber o encerramento da partida.
 7. Criar um sistema de aparência desacoplado do core e das regras. Permitir combinar
    temas de tabuleiro (madeira, verde torneio, azul, mármore e alto contraste) com
-   conjuntos SVG de peças (Staunton, minimalista, moderno e pixel art), sem duplicar
-   o componente do tabuleiro. Usar variáveis CSS para cores, coordenadas e destaques;
-   oferecer seletor com prévias; garantir nitidez, contraste e responsividade; e
-   salvar a preferência no `localStorage`.
+   conjuntos de peças (Staunton, minimalista, moderno e pixel art), sem duplicar o
+   componente do tabuleiro. Implementado após o MVP com variáveis CSS, seletor com
+   prévias, coordenadas e destaques adaptados, responsividade e preferência salva no
+   `localStorage`.
 8. Adicionar na home um link visível para o repositório público
    `github.com/filipenos/llm-game-arena`, abrindo em nova aba com `noopener` e
    `noreferrer`. Implementado após o MVP.
