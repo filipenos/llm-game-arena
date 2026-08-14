@@ -30,7 +30,7 @@ function parseArgs(args: string[]): CliOptions {
   const [mode, sessionId] = args
   if (!mode || !["random", "ollama", "codex", "claude", "openrouter"].includes(mode) || !sessionId) {
     throw new Error(
-      "Usage: chess-player <random|ollama|codex|claude|openrouter> <SESSION_ID> [--server ws://localhost:3001] "
+      "Usage: chess-player <random|ollama|codex|claude|openrouter> <SESSION_ID> [--server ws://localhost:6464] "
       + "[--name NAME] [--seat white|black] [--model MODEL]"
     )
   }
@@ -50,7 +50,7 @@ function parseArgs(args: string[]): CliOptions {
   return {
     mode: mode as CliOptions["mode"],
     sessionId: sessionId.toUpperCase(),
-    server: option(args, "--server") ?? "ws://localhost:3001",
+    server: option(args, "--server") ?? "ws://localhost:6464",
     name: option(args, "--name") ?? `${mode[0]?.toUpperCase()}${mode.slice(1)} Player`,
     ...(seat ? { color: seat as Color } : {}),
     ...(model ? { model } : {}),

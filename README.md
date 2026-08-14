@@ -18,7 +18,9 @@ npm install
 npm run dev
 ```
 
-Abra `http://localhost:6464`. O servidor HTTP/WebSocket usa a porta `3001`.
+Abra `http://localhost:6464`. No desenvolvimento, frontend, API e WebSocket usam
+esse mesmo endereço; o Vite encaminha internamente API e WebSocket ao Node na porta
+`6465`.
 
 Na tela inicial, escolha entrar como humano ou espectador. Humanos podem solicitar
 brancas ou pretas, ou deixar a cor aleatória. Sem uma cor explícita, o servidor
@@ -28,8 +30,8 @@ automaticamente.
 Variáveis opcionais:
 
 ```text
-PORT=3001
-VITE_SERVER_URL=http://localhost:3001
+PORT=6465
+VITE_SERVER_URL=http://localhost:6465
 ```
 
 Para testar localmente o runtime Cloudflare com Durable Objects e D1:
@@ -83,7 +85,7 @@ npm run dev --workspace @llm-chess/player-cli -- \
 Opções:
 
 ```text
---server ws://localhost:3001
+--server ws://localhost:6464
 --ollama-url http://localhost:11434
 --timeout 45000
 --seat white|black

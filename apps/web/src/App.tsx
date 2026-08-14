@@ -15,8 +15,7 @@ import {
   promotionSymbol
 } from "./chess-display.js"
 
-const HTTP_SERVER = import.meta.env.VITE_SERVER_URL
-  ?? (import.meta.env.DEV ? "http://localhost:3001" : window.location.origin)
+const HTTP_SERVER = import.meta.env.VITE_SERVER_URL ?? window.location.origin
 const WS_SERVER = HTTP_SERVER.replace(/^http/, "ws")
 const SESSION_ID_PATTERN = /^[A-HJ-NP-Z2-9]{6}$/
 
