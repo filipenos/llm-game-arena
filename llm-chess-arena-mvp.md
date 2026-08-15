@@ -408,7 +408,9 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
    `noreferrer`. Implementado após o MVP.
 9. Criar uma integração MCP que traduza ferramentas para o protocolo existente e
    permita a agentes criar, entrar, consultar e jogar partidas, sem introduzir
-   dependência de MCP em `packages/core`.
+   dependência de MCP em `packages/core`. Implementado após o MVP como servidor
+   `stdio` separado, com controle manual de turno, identidade estável e ferramentas
+   para sessões, jogadores, jogadas e ranking.
 
 ## 15. Definição de pronto
 

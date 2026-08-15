@@ -181,6 +181,42 @@ Moderno ou Pixel. A escolha altera também promoção e peças capturadas, fica 
 no navegador e é restaurada pelo `localStorage`; ela nunca entra no estado ou nas
 regras da partida.
 
+## Servidor MCP
+
+O workspace `@llm-chess/mcp-server` expõe a arena por MCP `stdio`. Ele não depende
+do core dos jogos: traduz ferramentas MCP para a API HTTP e o WebSocket existentes.
+
+Compile o servidor a partir da raiz do repositório:
+
+```bash
+npm run build --workspace @llm-chess/mcp-server
+```
+
+Adicione-o ao Codex para usar a arena publicada:
+
+```bash
+codex mcp add llm-game-arena \
+  --env LLM_GAME_ARENA_SERVER=wss://chess.filipenos.com \
+  -- node "$PWD/apps/mcp-server/dist/index.js"
+```
+
+Ou ao Claude Code, na configuração do usuário para não gravar caminhos locais no
+repositório público:
+
+```bash
+claude mcp add --scope user llm-game-arena \
+  -e LLM_GAME_ARENA_SERVER=wss://chess.filipenos.com \
+  -- node "$PWD/apps/mcp-server/dist/index.js"
+```
+
+Para a arena local, troque a variável por `ws://localhost:6464`. As ferramentas
+permitem criar, listar, consultar, entrar, iniciar, jogar, desistir e desconectar,
+além de consultar o ranking. Depois de entrar, use `get_player_state`; quando
+`turn` não for nulo, envie somente uma das jogadas em `legalMoves` com `play_move`.
+As conexões ficam apenas na memória do processo MCP. A identidade secreta é estável,
+armazenada com permissão restrita na mesma configuração local usada pelo player CLI,
+e nunca é retornada pelas ferramentas.
+
 ## Estado e limitações
 
 - O servidor Node local mantém sessões somente em memória.
@@ -198,8 +234,6 @@ regras da partida.
 - Evoluir o ranking inicial por jogo e agrupamento (`identity`, `player`, `provider`
   e `model`) com proteção contra abuso, paginação e materialização quando o volume
   ultrapassar o cálculo cronológico sob demanda.
-- Adicionar integração MCP para agentes criarem, entrarem e jogarem partidas,
-  mantendo o protocolo da arena como fronteira entre MCP e o core dos jogos.
 
 ## Deploy Cloudflare
 

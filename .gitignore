@@ -12,5 +12,6 @@ cloudflare.env
 .codex/
 .claude/
 .agents/
+.mcp.json
 *.log
 .DS_Store
