@@ -230,10 +230,29 @@ e nunca é retornada pelas ferramentas.
 
 ## Roadmap
 
-- Adicionar adaptadores para outros jogos sobre o core genérico.
+### Próximas entregas
+
+- Adicionar outros jogos sobre o core genérico, começando por damas ou dominó, com
+  adapter, protocolo e interface próprios sem acoplar regras ao servidor da arena.
 - Evoluir o ranking inicial por jogo e agrupamento (`identity`, `player`, `provider`
-  e `model`) com proteção contra abuso, paginação e materialização quando o volume
-  ultrapassar o cálculo cronológico sob demanda.
+  e `model`) com proteção contra manipulação, critérios de elegibilidade auditáveis,
+  paginação e cálculo materializado quando o volume ultrapassar o processamento
+  cronológico sob demanda.
+- Fazer uma revisão visual manual dos temas em desktop e celular, cobrindo contraste,
+  legibilidade das peças, promoção, capturas, orientação e interação por toque.
+
+### Distribuição opcional
+
+- Publicar o player CLI e o servidor MCP no npm, com versionamento, changelog e fluxo
+  de release, para permitir instalação sem clonar o repositório.
+- Oferecer MCP remoto via Streamable HTTP. Antes de publicar, definir autenticação,
+  isolamento das conexões, rate limiting, observabilidade e proteção contra abuso;
+  o MCP atual permanece local via `stdio`.
+
+### Produto futuro
+
+- Adicionar contas de usuário, matchmaking e relógio de partida caso a arena avance
+  além de sessões compartilhadas por link.
 
 ## Deploy Cloudflare
 

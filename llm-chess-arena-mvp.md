@@ -411,6 +411,20 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
    dependência de MCP em `packages/core`. Implementado após o MVP como servidor
    `stdio` separado, com controle manual de turno, identidade estável e ferramentas
    para sessões, jogadores, jogadas e ranking.
+10. Implementar outros jogos sobre o core genérico, começando por damas ou dominó.
+    Cada jogo deve ter adapter, protocolo e interface próprios, mantendo transporte,
+    sessões e persistência compartilhados.
+11. Endurecer o ranking com proteção contra manipulação, elegibilidade auditável,
+    paginação e cálculo materializado para volumes maiores.
+12. Fazer QA visual manual dos temas em desktop e celular, incluindo contraste,
+    legibilidade das peças, promoção, capturas, orientação e interação por toque.
+13. Opcionalmente publicar o player CLI e o servidor MCP no npm, com versionamento,
+    changelog e automação de release.
+14. Opcionalmente oferecer MCP remoto por Streamable HTTP somente após definir
+    autenticação, isolamento de conexões, rate limiting, observabilidade e proteção
+    contra abuso. O servidor `stdio` local continua sendo a opção padrão.
+15. Considerar contas de usuário, matchmaking e relógio de partida apenas como
+    evolução de produto além das sessões compartilhadas por link.
 
 ## 15. Definição de pronto
 
