@@ -557,8 +557,8 @@ function RecentSessions({ sessions }: { sessions: SessionSummary[] }) {
 }
 
 function InviteHelp({ sessionId }: { sessionId: string }) {
-  const commandPrefix = "npm run dev --workspace @llm-chess/player-cli --"
-  const serverOption = import.meta.env.DEV ? "" : ` --server ${WS_SERVER}`
+  const commandPrefix = "npm run play --"
+  const serverOption = import.meta.env.DEV ? " --local" : ""
   return (
     <details className="invite-help" open>
       <summary>Convidar pessoas ou LLMs</summary>

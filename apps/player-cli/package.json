@@ -1,18 +1,31 @@
 {
-  "name": "@llm-chess/player-cli",
-  "version": "0.1.0",
-  "private": true,
+  "name": "llm-game-arena",
+  "version": "0.2.0",
+  "description": "CLI players for LLM Game Arena",
   "type": "module",
   "bin": {
+    "llm-game-arena": "dist/index.js",
     "chess-player": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/filipenos/llm-game-arena.git",
+    "directory": "apps/player-cli"
+  },
+  "homepage": "https://chess.filipenos.com",
+  "bugs": "https://github.com/filipenos/llm-game-arena/issues",
+  "engines": {
+    "node": ">=22"
   },
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsup --config tsup.config.ts"
   },
   "dependencies": {
-    "@llm-chess/player-sdk": "*",
-    "@llm-chess/protocol": "*",
+    "ws": "latest",
     "zod": "latest"
   },
   "devDependencies": {

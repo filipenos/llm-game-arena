@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { AgentIdentityStore, PlayerClient } from "@llm-chess/player-sdk"
-import type { AgentMetadata, Color, ServerEvent } from "@llm-chess/protocol"
+import { sessionIdSchema, type AgentMetadata, type Color, type ServerEvent } from "@llm-chess/protocol"
 import {
   createClaudePlayer,
   createCodexPlayer,
@@ -21,18 +21,40 @@ interface CliOptions {
   timeout: number
 }
 
+const PRODUCTION_SERVER = "wss://chess.filipenos.com"
+const LOCAL_SERVER = "ws://localhost:6464"
+const USAGE = `Usage: llm-game-arena <random|ollama|codex|claude|openrouter> <SESSION_ID> [options]
+
+Options:
+  --server URL          Arena WebSocket URL (default: ${PRODUCTION_SERVER})
+  --local               Use ${LOCAL_SERVER}
+  --name NAME           Player name
+  --seat white|black    Request a color; omitted means automatic
+  --model MODEL         Model name (required for OpenRouter)
+  --timeout MS          Maximum time for each model attempt
+  --ollama-url URL      Ollama API URL (default: http://localhost:11434)
+  --help                 Show this help
+`
+
 function option(args: string[], name: string): string | undefined {
   const index = args.indexOf(name)
-  return index >= 0 ? args[index + 1] : undefined
+  if (index < 0) return undefined
+  const value = args[index + 1]
+  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`)
+  return value
 }
 
 function parseArgs(args: string[]): CliOptions {
   const [mode, sessionId] = args
   if (!mode || !["random", "ollama", "codex", "claude", "openrouter"].includes(mode) || !sessionId) {
     throw new Error(
-      "Usage: chess-player <random|ollama|codex|claude|openrouter> <SESSION_ID> [--server ws://localhost:6464] "
-      + "[--name NAME] [--seat white|black] [--model MODEL]"
+      USAGE
     )
+  }
+  const parsedSessionId = sessionIdSchema.safeParse(sessionId.toUpperCase())
+  if (!parsedSessionId.success) throw new Error("SESSION_ID must contain 6 valid letters or numbers")
+  if (args.includes("--local") && args.includes("--server")) {
+    throw new Error("Use either --local or --server, not both")
   }
   const seat = option(args, "--seat")
   if (seat && seat !== "white" && seat !== "black") {
@@ -40,7 +62,7 @@ function parseArgs(args: string[]): CliOptions {
   }
   const timeout = Number(
     option(args, "--timeout")
-      ?? (mode === "codex" || mode === "claude" || mode === "openrouter" ? 120_000 : 45_000)
+      ?? (mode === "codex" || mode === "claude" || mode === "openrouter" ? 50_000 : 45_000)
   )
   if (!Number.isFinite(timeout) || timeout < 1_000) {
     throw new Error("--timeout must be at least 1000 milliseconds")
@@ -49,8 +71,8 @@ function parseArgs(args: string[]): CliOptions {
   if (mode === "openrouter" && !model) throw new Error("openrouter requires --model")
   return {
     mode: mode as CliOptions["mode"],
-    sessionId: sessionId.toUpperCase(),
-    server: option(args, "--server") ?? "ws://localhost:6464",
+    sessionId: parsedSessionId.data,
+    server: args.includes("--local") ? LOCAL_SERVER : option(args, "--server") ?? PRODUCTION_SERVER,
     name: option(args, "--name") ?? `${mode[0]?.toUpperCase()}${mode.slice(1)} Player`,
     ...(seat ? { color: seat as Color } : {}),
     ...(model ? { model } : {}),
@@ -72,7 +94,12 @@ function logEvent(event: ServerEvent): void {
 }
 
 async function main(): Promise<void> {
+  if (process.argv.slice(2).includes("--help")) {
+    process.stdout.write(USAGE)
+    return
+  }
   const options = parseArgs(process.argv.slice(2))
+  process.stdout.write(`Joining ${options.sessionId} at ${options.server} as ${options.mode}.\n`)
   const identityToken = new AgentIdentityStore().getOrCreate({
     server: options.server,
     mode: options.mode,
