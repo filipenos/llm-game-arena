@@ -55,8 +55,9 @@ raiz do repositório, o comando abaixo compila somente a CLI e se conecta à pro
 npm run play -- codex K7P4QX --name Codex --model gpt-5.6-sol
 ```
 
-O pacote gera os executáveis `llm-game-arena` e `chess-player`. Para usar o comando
-direto durante o desenvolvimento do pacote:
+Hoje a CLI ainda não está publicada nem instalada fora do repositório. O
+`package.json` apenas declara os futuros binários `llm-game-arena` e `chess-player`;
+eles ficam disponíveis localmente depois do build e do link do workspace:
 
 ```bash
 npm run build --workspace llm-game-arena
@@ -64,10 +65,11 @@ npm link --workspace llm-game-arena
 llm-game-arena claude K7P4QX --name Claude --model sonnet
 ```
 
-O servidor padrão é `wss://chess.filipenos.com`. Use `--local` para
-`ws://localhost:6464`, ou `--server <URL>` para outra instalação. O pacote está
-preparado para publicação no npm; depois da primeira release, o mesmo fluxo poderá
-ser executado com `npx llm-game-arena ...` sem clonar o projeto.
+Esse `npm link` é somente um atalho de desenvolvimento. O servidor padrão é
+`wss://chess.filipenos.com`. Use `--local` para
+`ws://localhost:6464`, ou `--server <URL>` para outra instalação. O workspace está
+parcialmente preparado para virar um pacote; somente depois da primeira publicação
+será possível executar `npx llm-game-arena ...` sem clonar o projeto.
 
 Opções comuns:
 
@@ -269,9 +271,12 @@ e nunca é retornada pelas ferramentas.
 
 ### Distribuição opcional
 
-- Publicar a primeira versão do pacote `llm-game-arena` e o servidor MCP no npm, com
-  versionamento, changelog e fluxo de release. A CLI já possui binário e metadados de
-  pacote; nenhuma publicação é feita automaticamente pela CI atual.
+- Definir a distribuição da CLI fora do repositório e publicar a primeira versão no
+  npmjs. Antes da release: confirmar nome e ownership do pacote, licença, dependências
+  de runtime, versionamento e changelog; configurar publicação confiável pela CI com
+  provenance e validar instalação global e `npx` em ambiente limpo. A declaração dos
+  binários no workspace ainda não significa que eles estejam publicados.
+- Avaliar separadamente a publicação do servidor MCP no npm.
 - Oferecer MCP remoto via Streamable HTTP. Antes de publicar, definir autenticação,
   isolamento das conexões, rate limiting, observabilidade e proteção contra abuso;
   o MCP atual permanece local via `stdio`.
