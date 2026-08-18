@@ -153,17 +153,39 @@ describe("SessionManager", () => {
     manager.markReady(session, black)
     manager.startGame(session.id, session.controllerToken)
     session.game?.submitAction("white", { from: "e2", to: "e4" })
+    session.turnDeadlineAt = 123_456
 
     const persisted = manager.persistable(session)
     const restoredManager = new SessionManager()
     const restored = restoredManager.restore(persisted)
 
     expect(restored.game?.getActionCount()).toBe(1)
+    expect(restored.turnDeadlineAt).toBe(123_456)
     expect(restored.game?.getPublicState().fen).toBe(session.game?.getPublicState().fen)
     expect(restored.white?.connected).toBe(false)
     expect(restored.black?.connected).toBe(false)
     expect(restoredManager.snapshot(restored).game?.moves[0]?.uci).toBe("e2e4")
     expect(JSON.stringify(restoredManager.snapshot(restored))).not.toContain(session.controllerToken)
     expect(JSON.stringify(restoredManager.snapshot(restored))).not.toContain(white.resumeToken)
+  })
+
+  it("restores an arena-enforced result", () => {
+    const manager = new SessionManager()
+    const session = manager.createSession("K7P4QX")
+    const white = manager.joinPlayer(session.id, {
+      connectionId: "white", name: "White", type: "human", requestedColor: "white"
+    }).participant
+    const black = manager.joinPlayer(session.id, {
+      connectionId: "black", name: "Black", type: "agent", requestedColor: "black"
+    }).participant
+    manager.markReady(session, white)
+    manager.markReady(session, black)
+    manager.startGame(session.id, session.controllerToken)
+    session.game?.finish({ reason: "turn-timeout", winner: "black" })
+    session.status = "finished"
+
+    const restored = new SessionManager().restore(manager.persistable(session))
+
+    expect(restored.game?.getOutcome()).toEqual({ reason: "turn-timeout", winner: "black" })
   })
 })

@@ -41,6 +41,7 @@ export interface SessionRecord {
   black?: ParticipantRecord
   spectators: Set<string>
   game?: ChessGameContract
+  turnDeadlineAt?: number
   processedRequestIds: Set<string>
 }
 
@@ -69,6 +70,7 @@ export interface PersistedSession {
     moves: MoveCommand[]
     result?: GameResult
   }
+  turnDeadlineAt?: number
   processedRequestIds: string[]
 }
 
@@ -143,6 +145,7 @@ export class SessionManager {
           ...(result ? { result } : {})
         }
       } : {}),
+      ...(session.turnDeadlineAt ? { turnDeadlineAt: session.turnDeadlineAt } : {}),
       processedRequestIds: [...session.processedRequestIds]
     }
   }
@@ -157,6 +160,7 @@ export class SessionManager {
       controllerToken: persisted.controllerToken,
       ...(persisted.white ? { white: this.restoreParticipant(persisted.white) } : {}),
       ...(persisted.black ? { black: this.restoreParticipant(persisted.black) } : {}),
+      ...(persisted.turnDeadlineAt ? { turnDeadlineAt: persisted.turnDeadlineAt } : {}),
       spectators: new Set(),
       processedRequestIds: new Set(persisted.processedRequestIds)
     }
@@ -166,8 +170,8 @@ export class SessionManager {
         const result = session.game.submitAction(session.game.getCurrentSeat(), move)
         if (!result.valid) throw new Error(`Cannot restore invalid move in session ${session.id}`)
       }
-      if (persisted.game.result?.reason === "resignation" && persisted.game.result.winner) {
-        session.game.resign(persisted.game.result.winner === "white" ? "black" : "white")
+      if (persisted.game.result && !session.game.getOutcome()) {
+        session.game.finish(persisted.game.result)
       }
     }
     this.sessions.set(session.id, session)
@@ -319,6 +323,9 @@ export class SessionManager {
               ply: session.game.getActionCount(),
               moves: [...session.game.getHistory()],
               status: session.status === "finished" ? "finished" as const : "playing" as const,
+              ...(session.status === "playing" && session.turnDeadlineAt
+                ? { turnDeadlineAt: session.turnDeadlineAt }
+                : {}),
               ...(session.game.getOutcome() ? { result: session.game.getOutcome() } : {})
             }
           }

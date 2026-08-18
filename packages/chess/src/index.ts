@@ -102,8 +102,12 @@ export class ChessGame implements ChessGameContract {
   }
 
   resign(seat: Color): GameResult | undefined {
+    return this.finish({ reason: "resignation", winner: oppositeColor(seat) })
+  }
+
+  finish(outcome: GameResult): GameResult | undefined {
     if (this.isFinished()) return undefined
-    this.forcedResult = { reason: "resignation", winner: oppositeColor(seat) }
+    this.forcedResult = { ...outcome }
     return this.forcedResult
   }
 

@@ -28,6 +28,7 @@ export interface TurnBasedGame<
   getLegalActions(seat: TSeat): readonly TAction[]
   submitAction(seat: TSeat, action: TAction): ActionResult<TActionRecord>
   resign(seat: TSeat): GameOutcome<TSeat, TReason> | undefined
+  finish(outcome: GameOutcome<TSeat, TReason>): GameOutcome<TSeat, TReason> | undefined
   getHistory(): readonly TActionRecord[]
   getActionCount(): number
   isFinished(): boolean

@@ -16,6 +16,7 @@ describe("defineGame", () => {
         getLegalActions: () => [1],
         submitAction: () => ({ valid: true as const, action: 1 }),
         resign: () => ({ reason: "resignation", winner: "two" as const }),
+        finish: outcome => outcome,
         getHistory: () => [],
         getActionCount: () => 0,
         isFinished: () => false,

@@ -50,6 +50,8 @@ export type GameFinishReason =
   | "fifty-move-rule"
   | "draw"
   | "resignation"
+  | "turn-timeout"
+  | "move-limit"
 
 export interface GameResult {
   reason: GameFinishReason
@@ -75,6 +77,7 @@ export interface PublicGame {
   ply: number
   moves: ChessMove[]
   status: "playing" | "finished"
+  turnDeadlineAt?: number
   result?: GameResult
 }
 

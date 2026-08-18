@@ -353,6 +353,14 @@ export class SessionDurableObject extends DurableObject<Env> {
     await this.removeSocket(socket)
   }
 
+  override async alarm(): Promise<void> {
+    await this.ensureLoaded()
+    if (!this.arena || !this.session) return
+    this.arena.ensureTurnDeadline(this.session)
+    this.arena.expireTurn(this.session.id)
+    await this.persist()
+  }
+
   private async initialize(sessionId: string): Promise<Response> {
     const existing = await this.context.storage.get<PersistedSession>("session")
     if (existing) {
@@ -360,7 +368,7 @@ export class SessionDurableObject extends DurableObject<Env> {
     }
     const manager = new SessionManager()
     this.session = manager.createSession(sessionId)
-    this.arena = new ArenaService(manager)
+    this.arena = new ArenaService(manager, { manageTurnTimers: false })
     await this.persist()
     return json({
       sessionId: this.session.id,
@@ -379,7 +387,7 @@ export class SessionDurableObject extends DurableObject<Env> {
     if (!persisted) return
     const manager = new SessionManager()
     this.session = manager.restore(persisted)
-    this.arena = new ArenaService(manager)
+    this.arena = new ArenaService(manager, { manageTurnTimers: false })
     for (const socket of this.context.getWebSockets()) {
       const attachment = socket.deserializeAttachment() as SocketAttachment | null
       if (!attachment?.connectionId) continue
@@ -389,6 +397,8 @@ export class SessionDurableObject extends DurableObject<Env> {
         attachment.binding
       )
     }
+    this.arena.ensureTurnDeadline(this.session)
+    await this.syncTurnAlarm()
   }
 
   private upgradeWebSocket(request: Request): Response {
@@ -427,6 +437,7 @@ export class SessionDurableObject extends DurableObject<Env> {
   private async persist(): Promise<void> {
     if (!this.arena || !this.session) return
     await this.context.storage.put("session", this.arena.sessions.persistable(this.session))
+    await this.syncTurnAlarm()
     const snapshot = this.arena.sessions.snapshot(this.session)
     try {
       await this.env.DB.prepare(
@@ -473,5 +484,13 @@ export class SessionDurableObject extends DurableObject<Env> {
     } catch (error) {
       logUnexpectedError(`Session index update failed for ${this.session.id}`, error)
     }
+  }
+
+  private async syncTurnAlarm(): Promise<void> {
+    if (this.session?.status === "playing" && this.session.turnDeadlineAt) {
+      await this.context.storage.setAlarm(this.session.turnDeadlineAt)
+      return
+    }
+    await this.context.storage.deleteAlarm()
   }
 }

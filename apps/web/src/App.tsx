@@ -689,6 +689,15 @@ function GameStatus({
   error: string
   legalMoves: string[]
 }) {
+  const deadline = snapshot?.game?.turnDeadlineAt
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (!deadline || snapshot?.game?.result) return
+    setNow(Date.now())
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [deadline, snapshot?.game?.result])
+
   if (!snapshot) {
     return <p className="game-status">{error ? "Estado indisponível" : "Carregando estado…"}</p>
   }
@@ -696,10 +705,11 @@ function GameStatus({
   if (snapshot.game.result) {
     return (
       <p className="game-status result">
-        Fim: {snapshot.game.result.reason} · {snapshot.game.result.winner ? `${snapshot.game.result.winner} venceu` : "empate"}
+        Fim: {finishReasonLabel(snapshot.game.result.reason)} · {snapshot.game.result.winner ? `${snapshot.game.result.winner === "white" ? "brancas" : "pretas"} venceram` : "empate"}
       </p>
     )
   }
+  const remaining = deadline ? ` · ${formatRemainingTime(deadline - now)}` : ""
   const ownTurn = mine?.color === snapshot.game.turn
   if (ownTurn) {
     const lastMove = snapshot.game.moves.at(-1)?.san ?? ""
@@ -708,10 +718,30 @@ function GameStatus({
       <p className={`game-status ${inCheck ? "check" : ""}`}>
         {inCheck ? "Sua vez — xeque" : "Sua vez"}
         {legalMoves.length === 1 ? " · única jogada legal destacada" : ""}
+        {remaining}
       </p>
     )
   }
-  return <p className="game-status">Vez das {snapshot.game.turn === "white" ? "brancas" : "pretas"}</p>
+  return <p className="game-status">Vez das {snapshot.game.turn === "white" ? "brancas" : "pretas"}{remaining}</p>
+}
+
+function formatRemainingTime(milliseconds: number): string {
+  const seconds = Math.max(0, Math.ceil(milliseconds / 1_000))
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+}
+
+function finishReasonLabel(reason: string): string {
+  return ({
+    checkmate: "xeque-mate",
+    stalemate: "afogamento",
+    "threefold-repetition": "repetição tripla",
+    "insufficient-material": "material insuficiente",
+    "fifty-move-rule": "regra dos 50 lances",
+    draw: "empate",
+    resignation: "desistência",
+    "turn-timeout": "tempo esgotado",
+    "move-limit": "limite de jogadas"
+  } as Record<string, string>)[reason] ?? reason
 }
 
 function parseFen(fen?: string): Map<string, string> {

@@ -1,5 +1,5 @@
 import { moveToUci } from "@llm-chess/chess"
-import type { ClientEvent, Color, ServerEvent } from "@llm-chess/protocol"
+import { oppositeColor, type ClientEvent, type Color, type GameResult, type ServerEvent } from "@llm-chess/protocol"
 import { DomainError } from "./domain.js"
 import {
   SessionManager,
@@ -18,12 +18,35 @@ export interface ConnectionBinding {
   participantId?: string
 }
 
+export const TURN_TIMEOUT_MS = 2 * 60 * 1_000
+export const MAX_GAME_PLIES = 300
+
+export interface ArenaServiceOptions {
+  manageTurnTimers?: boolean
+  maxGamePlies?: number
+  now?: () => number
+  turnTimeoutMs?: number
+}
+
 export class ArenaService {
   private readonly sinks = new Map<string, EventSink>()
   private readonly bindings = new Map<string, ConnectionBinding>()
   private readonly queues = new Map<string, Promise<void>>()
+  private readonly turnTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly manageTurnTimers: boolean
+  private readonly maxGamePlies: number
+  private readonly now: () => number
+  private readonly turnTimeoutMs: number
 
-  constructor(readonly sessions = new SessionManager()) {}
+  constructor(
+    readonly sessions = new SessionManager(),
+    options: ArenaServiceOptions = {}
+  ) {
+    this.manageTurnTimers = options.manageTurnTimers ?? true
+    this.maxGamePlies = options.maxGamePlies ?? MAX_GAME_PLIES
+    this.now = options.now ?? Date.now
+    this.turnTimeoutMs = options.turnTimeoutMs ?? TURN_TIMEOUT_MS
+  }
 
   addConnection(connectionId: string, sink: EventSink): void {
     this.sinks.set(connectionId, sink)
@@ -90,6 +113,8 @@ export class ArenaService {
     if (!game) throw new DomainError("INTERNAL_ERROR", "Game was not created", 500)
     if (alreadyStarted) return session
 
+    this.beginTurn(session)
+
     this.broadcast(session, {
       type: "game.started",
       gameId: game.id,
@@ -99,6 +124,35 @@ export class ArenaService {
     this.broadcastSnapshot(session)
     this.notifyTurn(session)
     return session
+  }
+
+  ensureTurnDeadline(session: SessionRecord): void {
+    if (session.status !== "playing" || !session.game) {
+      this.cancelTurnTimer(session.id)
+      return
+    }
+    if (!session.turnDeadlineAt) {
+      session.turnDeadlineAt = this.now() + this.turnTimeoutMs
+      this.sessions.touch(session)
+    }
+    this.scheduleTurnTimer(session)
+  }
+
+  expireTurn(sessionId: string, now = this.now()): boolean {
+    const session = this.sessions.getSession(sessionId)
+    const game = session.game
+    if (session.status !== "playing" || !game || !session.turnDeadlineAt) return false
+    if (now < session.turnDeadlineAt) {
+      this.scheduleTurnTimer(session)
+      return false
+    }
+    const result = game.finish({
+      reason: "turn-timeout",
+      winner: oppositeColor(game.getCurrentSeat())
+    })
+    if (!result) return false
+    this.finishGame(session, result)
+    return true
   }
 
   broadcastSnapshot(session: SessionRecord): void {
@@ -245,13 +299,16 @@ export class ArenaService {
 
     const gameResult = game.getOutcome()
     if (gameResult) {
-      session.status = "finished"
-      this.sessions.touch(session)
-      this.broadcast(session, { type: "game.finished", result: gameResult })
-      this.broadcastSnapshot(session)
+      this.finishGame(session, gameResult)
+      return
+    }
+    if (game.getActionCount() >= this.maxGamePlies) {
+      const moveLimitResult = game.finish({ reason: "move-limit", winner: null })
+      if (moveLimitResult) this.finishGame(session, moveLimitResult)
       return
     }
 
+    this.beginTurn(session)
     this.broadcastSnapshot(session)
     this.notifyTurn(session)
   }
@@ -263,10 +320,39 @@ export class ArenaService {
     }
     const result = session.game.resign(participant.color)
     if (!result) throw new DomainError("GAME_NOT_PLAYING", "The game has already finished")
+    this.finishGame(session, result)
+  }
+
+  private beginTurn(session: SessionRecord): void {
+    session.turnDeadlineAt = this.now() + this.turnTimeoutMs
+    this.sessions.touch(session)
+    this.scheduleTurnTimer(session)
+  }
+
+  private finishGame(session: SessionRecord, result: GameResult): void {
     session.status = "finished"
+    delete session.turnDeadlineAt
+    this.cancelTurnTimer(session.id)
     this.sessions.touch(session)
     this.broadcast(session, { type: "game.finished", result })
     this.broadcastSnapshot(session)
+  }
+
+  private scheduleTurnTimer(session: SessionRecord): void {
+    if (!this.manageTurnTimers || !session.turnDeadlineAt) return
+    this.cancelTurnTimer(session.id)
+    const delay = Math.max(0, session.turnDeadlineAt - this.now())
+    const timer = setTimeout(() => {
+      void this.enqueue(session.id, () => { this.expireTurn(session.id) })
+    }, delay)
+    timer.unref?.()
+    this.turnTimers.set(session.id, timer)
+  }
+
+  private cancelTurnTimer(sessionId: string): void {
+    const timer = this.turnTimers.get(sessionId)
+    if (timer) clearTimeout(timer)
+    this.turnTimers.delete(sessionId)
   }
 
   private notifyTurn(session: SessionRecord): void {

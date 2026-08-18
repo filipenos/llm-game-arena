@@ -7,6 +7,67 @@ function eventSink(events: ServerEvent[]) {
 }
 
 describe("ArenaService", () => {
+  it("awards the game when a player exceeds the turn deadline", async () => {
+    let now = 1_000
+    const arena = new ArenaService(undefined, {
+      manageTurnTimers: false,
+      now: () => now,
+      turnTimeoutMs: 120_000
+    })
+    const session = arena.sessions.createSession()
+    const events: ServerEvent[] = []
+    arena.addConnection("white", eventSink(events))
+    arena.addConnection("black", eventSink(events))
+    await arena.handleEvent("white", {
+      type: "connection.join", sessionId: session.id, role: "player",
+      name: "White", participantType: "human", requestedColor: "white"
+    })
+    await arena.handleEvent("black", {
+      type: "connection.join", sessionId: session.id, role: "player",
+      name: "Black", participantType: "agent", requestedColor: "black"
+    })
+    await arena.handleEvent("white", { type: "player.ready" })
+    await arena.handleEvent("black", { type: "player.ready" })
+    arena.startSession(session.id, session.controllerToken)
+
+    expect(session.turnDeadlineAt).toBe(121_000)
+    now = 120_999
+    expect(arena.expireTurn(session.id)).toBe(false)
+    now = 121_000
+    expect(arena.expireTurn(session.id)).toBe(true)
+    expect(session.game?.getOutcome()).toEqual({ reason: "turn-timeout", winner: "black" })
+    expect(session.turnDeadlineAt).toBeUndefined()
+    expect(events).toContainEqual({
+      type: "game.finished",
+      result: { reason: "turn-timeout", winner: "black" }
+    })
+  })
+
+  it("declares a draw when the arena move limit is reached", async () => {
+    const arena = new ArenaService(undefined, { manageTurnTimers: false, maxGamePlies: 1 })
+    const session = arena.sessions.createSession()
+    arena.addConnection("white", eventSink([]))
+    arena.addConnection("black", eventSink([]))
+    await arena.handleEvent("white", {
+      type: "connection.join", sessionId: session.id, role: "player",
+      name: "White", participantType: "human", requestedColor: "white"
+    })
+    await arena.handleEvent("black", {
+      type: "connection.join", sessionId: session.id, role: "player",
+      name: "Black", participantType: "agent", requestedColor: "black"
+    })
+    await arena.handleEvent("white", { type: "player.ready" })
+    await arena.handleEvent("black", { type: "player.ready" })
+    arena.startSession(session.id, session.controllerToken)
+
+    await arena.handleEvent("white", {
+      type: "move.play", requestId: "move-limit", expectedPly: 0, from: "e2", to: "e4"
+    })
+
+    expect(session.status).toBe("finished")
+    expect(session.game?.getOutcome()).toEqual({ reason: "move-limit", winner: null })
+  })
+
   it("runs the authoritative join, start and move flow", async () => {
     const arena = new ArenaService()
     const session = arena.sessions.createSession()

@@ -113,4 +113,17 @@ describe("ChessGame", () => {
     expect(game.resign("white")).toEqual({ reason: "resignation", winner: "black" })
     expect(game.isFinished()).toBe(true)
   })
+
+  it("supports an externally enforced finish", () => {
+    const game = new ChessGame("game")
+
+    expect(game.finish({ reason: "turn-timeout", winner: "black" })).toEqual({
+      reason: "turn-timeout",
+      winner: "black"
+    })
+    expect(game.submitAction("white", { from: "e2", to: "e4" })).toEqual({
+      valid: false,
+      reason: "game-finished"
+    })
+  })
 })
