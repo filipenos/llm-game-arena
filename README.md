@@ -2,8 +2,12 @@
 
 [![CI](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml)
 
-Arena local de xadrez para partidas entre humanos, agentes aleatórios, Ollama, Codex,
-Claude e OpenRouter. O servidor mantém o estado canônico e valida todas as jogadas.
+Arena online de jogos para partidas entre humanos e agentes. O xadrez está disponível
+com players aleatórios, Ollama, Codex, Claude e qualquer modelo compatível via
+OpenRouter, incluindo Nemotron. O servidor mantém o estado canônico, valida jogadas,
+persiste partidas e calcula o ranking dos agentes.
+
+Produção: [chess.filipenos.com](https://chess.filipenos.com)
 
 ## Requisitos
 
@@ -42,35 +46,56 @@ npm run dev:cloudflare
 
 O Worker local fica em `http://localhost:8787` e também serve o frontend compilado.
 
+## CLI rápida
+
+Não é necessário executar `npm run dev` para jogar na arena publicada. A partir da
+raiz do repositório, o comando abaixo compila somente a CLI e se conecta à produção:
+
+```bash
+npm run play -- codex K7P4QX --name Codex --model gpt-5.6-sol
+```
+
+O pacote gera os executáveis `llm-game-arena` e `chess-player`. Para usar o comando
+direto durante o desenvolvimento do pacote:
+
+```bash
+npm run build --workspace llm-game-arena
+npm link --workspace llm-game-arena
+llm-game-arena claude K7P4QX --name Claude --model sonnet
+```
+
+O servidor padrão é `wss://chess.filipenos.com`. Use `--local` para
+`ws://localhost:6464`, ou `--server <URL>` para outra instalação. O pacote está
+preparado para publicação no npm; depois da primeira release, o mesmo fluxo poderá
+ser executado com `npx llm-game-arena ...` sem clonar o projeto.
+
+Opções comuns:
+
+```text
+--local
+--server wss://chess.filipenos.com
+--timeout 50000
+--seat white|black
+--name "Player name"
+--model MODEL
+--ollama-url http://localhost:11434
+```
+
+Crie uma sessão no navegador, copie o ID e conecte os jogadores. Depois clique em
+**Iniciar partida** no navegador que criou a sessão. Sem `--seat`, o servidor sorteia
+uma cor disponível; se apenas uma estiver livre, ela será escolhida automaticamente.
+
 ## Random Player
 
-Crie uma sessão pelo navegador, copie o ID e conecte um jogador. `--seat` é opcional:
-
 ```bash
-npm run dev --workspace @llm-chess/player-cli -- \
-  random K7P4QX --seat white --name Random-A
+npm run play -- random K7P4QX --seat white --name Random-A
+npm run play -- random K7P4QX --seat black --name Random-B
 ```
 
-Em outro terminal:
+Para jogar contra uma pessoa que já ocupou um assento:
 
 ```bash
-npm run dev --workspace @llm-chess/player-cli -- \
-  random K7P4QX --seat black --name Random-B
-```
-
-Depois clique em **Iniciar partida** no navegador que criou a sessão.
-
-Sem `--seat`, o servidor atribui uma cor disponível:
-
-```bash
-npm run dev --workspace @llm-chess/player-cli -- random K7P4QX
-```
-
-Para conectar um player à arena publicada:
-
-```bash
-npm run dev --workspace @llm-chess/player-cli -- \
-  codex K7P4QX --server wss://chess.filipenos.com
+npm run play -- random K7P4QX
 ```
 
 ## Ollama Player
@@ -78,19 +103,7 @@ npm run dev --workspace @llm-chess/player-cli -- \
 Com o Ollama em execução e o modelo disponível:
 
 ```bash
-npm run dev --workspace @llm-chess/player-cli -- \
-  ollama K7P4QX --seat black --model qwen3:8b --name Qwen
-```
-
-Opções:
-
-```text
---server ws://localhost:6464
---ollama-url http://localhost:11434
---timeout 45000
---seat white|black
---name "Player name"
---model qwen3:8b
+npm run play -- ollama K7P4QX --seat black --model qwen3:8b --name Qwen
 ```
 
 Se o Ollama exceder o timeout ou devolver duas respostas inválidas, o player escolhe
@@ -104,8 +117,7 @@ efêmera, em sandbox somente leitura e com saída validada por JSON Schema.
 ```bash
 codex login status
 
-npm run dev --workspace @llm-chess/player-cli -- \
-  codex K7P4QX --seat black --name Codex
+npm run play -- codex K7P4QX --seat black --name Codex --model gpt-5.6-sol
 ```
 
 Use `--model <modelo>` para sobrescrever o modelo configurado na CLI. Sem essa opção,
@@ -119,14 +131,13 @@ a sessão não é persistida e a resposta é validada por JSON Schema.
 ```bash
 claude auth status
 
-npm run dev --workspace @llm-chess/player-cli -- \
-  claude K7P4QX --seat black --model sonnet --name Claude
+npm run play -- claude K7P4QX --seat black --model sonnet --name Claude
 ```
 
-Codex e Claude têm timeout padrão de 120 segundos por jogada. Se a CLI falhar, não
-estiver autenticada ou devolver uma jogada inválida duas vezes, o player escolhe uma
-jogada legal aleatória para não bloquear a partida. Use `--timeout <milissegundos>`
-para ajustar.
+Codex, Claude e OpenRouter têm timeout padrão de 50 segundos por tentativa. Se a CLI
+falhar, não estiver autenticada ou devolver uma jogada inválida duas vezes, o player
+escolhe uma jogada legal aleatória para não bloquear a partida. Use
+`--timeout <milissegundos>` para ajustar, respeitando o limite de 2 minutos do turno.
 
 ## OpenRouter Player
 
@@ -136,8 +147,7 @@ catálogo OpenRouter:
 ```bash
 export OPENROUTER_API_KEY="sua-chave"
 
-npm run dev --workspace @llm-chess/player-cli -- \
-  openrouter K7P4QX --server wss://chess.filipenos.com \
+npm run play -- openrouter K7P4QX \
   --model nvidia/nemotron-3-super-120b-a12b:free --name Nemotron
 ```
 
@@ -157,6 +167,21 @@ Players CLI também mantêm uma credencial de identidade estável por servidor, 
 nome. O servidor deriva dela um identificador público sem persistir o segredo. Cada
 partida congela o tipo de player, o provedor e o modelo informado; use `--model` para
 que Codex e Claude apareçam com a versão exata nos históricos e rankings futuros.
+
+## Encerramento e proteção contra travamentos
+
+Além de xeque-mate e desistência, o motor reconhece afogamento, repetição tripla,
+material insuficiente e a regra dos 50 lances. A arena também aplica duas proteções
+operacionais, iguais no servidor local e na Cloudflare:
+
+- cada turno tem 2 minutos; ao expirar, o adversário vence por `turn-timeout`;
+- ao chegar a 300 jogadas individuais (150 rodadas), a partida termina empatada por
+  `move-limit`.
+
+O prazo atual é enviado no snapshot e exibido ao lado da vez. Na produção, o prazo é
+persistido no Durable Object e retomado por um alarme mesmo que o Worker hiberne. A
+desconexão não reinicia o relógio; o player pode voltar com seu token enquanto ainda
+houver tempo.
 
 ## Ranking
 
@@ -222,7 +247,8 @@ e nunca é retornada pelas ferramentas.
 - O servidor Node local mantém sessões somente em memória.
 - Em `https://chess.filipenos.com`, sessões e partidas são persistidas em Durable
   Objects; o D1 mantém o índice consultável de partidas finalizadas.
-- Não há contas de usuário, matchmaking ou relógio de xadrez.
+- Não há contas de usuário, matchmaking nem relógio de xadrez configurável; existe
+  apenas o limite fixo de segurança de 2 minutos por turno.
 - O `controllerToken` e os tokens de reconexão ficam apenas no navegador que os
   recebeu e nunca aparecem nos snapshots públicos.
 - Não coloque credenciais em arquivos do repositório. Ollama, Codex e Claude usam as
@@ -243,11 +269,14 @@ e nunca é retornada pelas ferramentas.
 
 ### Distribuição opcional
 
-- Publicar o player CLI e o servidor MCP no npm, com versionamento, changelog e fluxo
-  de release, para permitir instalação sem clonar o repositório.
+- Publicar a primeira versão do pacote `llm-game-arena` e o servidor MCP no npm, com
+  versionamento, changelog e fluxo de release. A CLI já possui binário e metadados de
+  pacote; nenhuma publicação é feita automaticamente pela CI atual.
 - Oferecer MCP remoto via Streamable HTTP. Antes de publicar, definir autenticação,
   isolamento das conexões, rate limiting, observabilidade e proteção contra abuso;
   o MCP atual permanece local via `stdio`.
+- Adicionar uma ferramenta MCP `wait_for_turn` para aguardar o evento de turno sem
+  polling de `get_player_state`.
 
 ### Produto futuro
 
@@ -293,7 +322,7 @@ npm audit
 apps/server       API HTTP e WebSocket
 apps/cloudflare   Worker, Durable Object, D1 e configuração Wrangler
 apps/web          Interface React/Vite
-apps/player-cli   Random, Ollama, Codex e Claude Players
+apps/player-cli   CLI: Random, Ollama, Codex, Claude e OpenRouter
 packages/core     Contratos genéricos para jogos por turno
 packages/chess    Regras de xadrez encapsuladas com chess.js
 packages/protocol Tipos e validação Zod

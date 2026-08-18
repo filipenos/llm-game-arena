@@ -1,8 +1,9 @@
-# LLM Chess Arena — Plano de Implementação do MVP
+# LLM Game Arena — Plano e Estado da Implementação
 
 ## 1. Objetivo
 
-Construir uma arena de xadrez local em que humanos, agentes e futuramente engines
+Construir uma arena de jogos online, com desenvolvimento local, em que humanos,
+agentes e futuramente engines
 ocupem os mesmos assentos e usem o mesmo protocolo. O servidor é a única autoridade:
 mantém a posição, valida identidade, turno e jogadas, calcula o resultado e publica o
 estado canônico.
@@ -16,11 +17,13 @@ O MVP suporta:
 - Início manual pelo controlador da sessão.
 - Tabuleiro, histórico, estado dos participantes e resultado em tempo real.
 - Todas as regras e condições de término fornecidas pelo `chess.js`.
-- Random, Ollama, Codex e Claude Players com memória estratégica curta.
-- Sessões somente em memória. Reiniciar o servidor apaga as sessões.
+- Random, Ollama, Codex, Claude e OpenRouter Players com memória estratégica curta.
+- Sessões locais em memória e sessões de produção persistidas em Durable Objects,
+  com índice histórico no D1.
+- Timeout de 2 minutos por turno e empate após 300 jogadas individuais.
 
-Persistência, relógio de xadrez, matchmaking, deploy, autenticação de usuários e MCP
-ficam fora do MVP.
+Contas, matchmaking, relógio de xadrez configurável e novos jogos ficam fora do MVP.
+Persistência, deploy, ranking e MCP foram adicionados depois da primeira versão.
 
 ## 2. Decisões fechadas
 
@@ -28,7 +31,9 @@ ficam fora do MVP.
 - npm workspaces, pois é o gerenciador disponível no ambiente do projeto.
 - `apps/server`: servidor Node independente com HTTP e WebSocket.
 - `apps/web`: React e Vite.
-- `apps/player-cli`: CLI para Random, Ollama, Codex e Claude.
+- `apps/cloudflare`: Worker, Durable Objects, alarmes e índice D1 da produção.
+- `apps/mcp-server`: bridge MCP `stdio` para a API e o WebSocket.
+- `apps/player-cli`: CLI para Random, Ollama, Codex, Claude e OpenRouter.
 - `packages/core`: contratos genéricos para jogos por turno.
 - `packages/chess`: implementação de xadrez e wrapper exclusivo do `chess.js`.
 - `packages/protocol`: tipos e schemas Zod usados em runtime.
@@ -44,10 +49,13 @@ WebSockets ao ciclo de vida de um frontend ou ambiente serverless.
 llm-chess-arena/
 ├── apps/
 │   ├── server/src/
+│   ├── cloudflare/src/
+│   ├── mcp-server/src/
 │   ├── web/src/
 │   └── player-cli/src/
 ├── packages/
 │   ├── core/src/
+│   ├── chess/src/
 │   ├── protocol/src/
 │   └── player-sdk/src/
 ├── package.json
@@ -277,13 +285,16 @@ A classificação do resultado tem precedência determinística:
 6. `draw`
 7. `resignation`
 
+Resultados operacionais da arena são `turn-timeout`, com vitória do adversário, e
+`move-limit`, com empate após 300 plies.
+
 O projeto fixa a versão do `chess.js` no lockfile e testa a semântica usada.
 
 ## 9. Player SDK e agentes
 
 ```ts
 const player = new PlayerClient({
-  server: "ws://localhost:3001",
+  server: "ws://localhost:6464",
   sessionId: "K7P4QX",
   name: "Qwen 14B",
   type: "agent",
@@ -295,7 +306,7 @@ await player.connect()
 ```
 
 O SDK envia `player.ready`, publica atividade e mantém o contexto do turno. O Random
-Player escolhe uma jogada legal. Os players Ollama, Codex e Claude:
+Player escolhe uma jogada legal. Os players Ollama, Codex, Claude e OpenRouter:
 
 - Usa saída JSON e valida a resposta.
 - Aceita somente uma jogada presente em `legalMoves`.
@@ -319,6 +330,9 @@ A interface permite:
 - Ver conexão, prontidão e atividade de cada participante.
 - Iniciar a sessão quando possuir o `controllerToken`.
 - Jogar por drag and drop, incluindo escolha de promoção.
+- Jogar por toque selecionando origem e destino, com destinos legais destacados.
+- Escolher promoção em um diálogo com ícones e ver as peças capturadas por cada lado.
+- Escolher temas de tabuleiro e conjuntos de peças persistidos no navegador.
 - Observar partidas, histórico, turno e resultado.
 - Reconectar usando o `resumeToken` salvo localmente.
 - Compartilhar um link para outro humano e consultar comandos de conexão dos agentes.
@@ -329,8 +343,9 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
 
 - Antes do início, desconexão torna a sessão `waiting`.
 - Durante a partida, o assento permanece reservado para reconexão.
-- O MVP não encerra automaticamente por desconexão; o controlador pode reiniciar o
-  servidor ou o jogador pode reconectar.
+- A desconexão não libera o assento nem reinicia o prazo; o jogador pode reconectar
+  com seu token antes do fim do turno.
+- A arena encerra o turno após 2 minutos e declara empate após 300 plies.
 - Agentes possuem timeout próprio e fallback.
 - Um jogador pode enviar `game.resign`; o adversário vence.
 - Payload inválido encerra apenas aquela mensagem e gera `error`, sem derrubar o
@@ -352,7 +367,7 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
 - Identidade derivada da conexão.
 - Jogador errado, ply desatualizado e jogada duplicada.
 - Reconexão por token.
-- Bloqueio de jogadas após o fim e abandono.
+- Bloqueio de jogadas após o fim, timeout de turno e limite de plies.
 
 ### Protocolo e integração
 
@@ -418,13 +433,15 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
     paginação e cálculo materializado para volumes maiores.
 12. Fazer QA visual manual dos temas em desktop e celular, incluindo contraste,
     legibilidade das peças, promoção, capturas, orientação e interação por toque.
-13. Opcionalmente publicar o player CLI e o servidor MCP no npm, com versionamento,
-    changelog e automação de release.
+13. Publicar a primeira versão da CLI `llm-game-arena` e, opcionalmente, o servidor
+    MCP no npm, com versionamento, changelog e automação de release. A CLI já está
+    empacotada, mas a publicação ainda não foi executada.
 14. Opcionalmente oferecer MCP remoto por Streamable HTTP somente após definir
     autenticação, isolamento de conexões, rate limiting, observabilidade e proteção
     contra abuso. O servidor `stdio` local continua sendo a opção padrão.
 15. Considerar contas de usuário, matchmaking e relógio de partida apenas como
     evolução de produto além das sessões compartilhadas por link.
+16. Adicionar `wait_for_turn` ao MCP para aguardar o turno sem polling.
 
 ## 15. Definição de pronto
 
@@ -438,5 +455,6 @@ O MVP está pronto quando:
 6. Todas as jogadas são validadas no servidor.
 7. Espectadores acompanham snapshots, histórico, estados e resultado.
 8. Random vs Random e Humano vs Random funcionam ponta a ponta; os adapters Ollama,
-   Codex e Claude funcionam quando suas respectivas ferramentas estão autenticadas.
+   Codex e Claude funcionam quando suas respectivas ferramentas estão autenticadas;
+   OpenRouter funciona quando `OPENROUTER_API_KEY` e `--model` são informados.
 9. `npm test`, `npm run lint`, `npm run typecheck` e `npm run build` passam.
