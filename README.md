@@ -260,6 +260,15 @@ e nunca é retornada pelas ferramentas.
 
 ### Próximas entregas
 
+- Adicionar observabilidade pública a todos os players suportados: Random, Ollama,
+  Codex, Claude e OpenRouter. A Player SDK deve publicar eventos `player.progress`
+  limitados e validados para etapas como recebimento do turno, análise, geração,
+  validação, nova tentativa, fallback e decisão. A interface deve mostrar um feed por
+  jogador com tempo decorrido e, quando o provedor fornecer, tokens e duração.
+- Pedir aos agentes um `commentary` público curto para explicar a jogada depois que
+  ela for confirmada. A memória estratégica continua privada e nenhum raciocínio
+  interno bruto deve ser enviado à arena. Players sem streaming devem emitir as
+  mesmas etapas básicas; Random deve informar apenas seleção e decisão.
 - Adicionar outros jogos sobre o core genérico, começando por damas ou dominó, com
   adapter, protocolo e interface próprios sem acoplar regras ao servidor da arena.
 - Evoluir o ranking inicial por jogo e agrupamento (`identity`, `player`, `provider`
