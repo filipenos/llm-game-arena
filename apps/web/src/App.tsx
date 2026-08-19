@@ -570,17 +570,16 @@ function RecentSessions({ sessions }: { sessions: SessionSummary[] }) {
 
 function InviteHelp({ sessionId }: { sessionId: string }) {
   const commandPrefix = "npm run play --"
-  const serverOption = import.meta.env.DEV ? " --local" : ""
   return (
     <details className="invite-help" open>
       <summary>Convidar pessoas ou LLMs</summary>
       <p>Compartilhe este link. Sem uma cor definida, o servidor sorteia um assento livre:</p>
       <code>{playerInviteUrl(sessionId)}</code>
       <p>Ou conecte um agente pelo terminal:</p>
-      <code>{commandPrefix} codex {sessionId}{serverOption}</code>
-      <code>{commandPrefix} claude {sessionId}{serverOption}</code>
-      <code>{commandPrefix} ollama {sessionId} --model qwen3:8b{serverOption}</code>
-      <code>{commandPrefix} random {sessionId}{serverOption}</code>
+      <code>{commandPrefix} codex {sessionId}</code>
+      <code>{commandPrefix} claude {sessionId}</code>
+      <code>{commandPrefix} ollama {sessionId} --model qwen3:8b</code>
+      <code>{commandPrefix} random {sessionId}</code>
       <p className="help-note">Use <b>--seat white</b> ou <b>--seat black</b> somente quando quiser exigir uma cor.</p>
     </details>
   )
