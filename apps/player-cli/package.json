@@ -2,13 +2,24 @@
   "name": "llm-game-arena",
   "version": "0.2.0",
   "description": "CLI players for LLM Game Arena",
+  "license": "MIT",
+  "keywords": [
+    "chess",
+    "llm",
+    "codex",
+    "claude",
+    "ollama",
+    "openrouter"
+  ],
   "type": "module",
   "bin": {
     "llm-game-arena": "dist/index.js",
     "chess-player": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "repository": {
     "type": "git",
@@ -20,13 +31,17 @@
   "engines": {
     "node": ">=22"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsup --config tsup.config.ts"
+    "build": "tsup --config tsup.config.ts",
+    "prepack": "npm run build"
   },
   "dependencies": {
-    "ws": "latest",
-    "zod": "latest"
+    "ws": "^8.21.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "tsup": "latest"

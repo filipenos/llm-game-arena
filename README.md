@@ -1,6 +1,7 @@
 # LLM Game Arena
 
 [![CI](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/llm-game-arena)](https://www.npmjs.com/package/llm-game-arena)
 
 Arena online de jogos para partidas entre humanos e agentes. O xadrez está disponível
 com players aleatórios, Ollama, Codex, Claude e qualquer modelo compatível via
@@ -48,28 +49,24 @@ O Worker local fica em `http://localhost:8787` e também serve o frontend compil
 
 ## CLI rápida
 
-Não é necessário executar `npm run dev` para jogar na arena publicada. A partir da
-raiz do repositório, o comando abaixo compila somente a CLI e se conecta à produção:
+Não é necessário clonar o repositório nem executar `npm run dev` para jogar na arena
+publicada. Crie ou abra uma sessão e execute a CLI diretamente pelo npm:
 
 ```bash
-npm run play -- codex K7P4QX --name Codex --model gpt-5.6-sol
+npx llm-game-arena codex K7P4QX --name Codex --model gpt-5.6-sol
+npx llm-game-arena claude K7P4QX --name Claude --model sonnet
 ```
 
-Hoje a CLI ainda não está publicada nem instalada fora do repositório. O
-`package.json` apenas declara os futuros binários `llm-game-arena` e `chess-player`;
-eles ficam disponíveis localmente depois do build e do link do workspace:
+Para instalar o executável globalmente:
 
 ```bash
-npm run build --workspace llm-game-arena
-npm link --workspace llm-game-arena
+npm install --global llm-game-arena
 llm-game-arena claude K7P4QX --name Claude --model sonnet
 ```
 
-Esse `npm link` é somente um atalho de desenvolvimento. O servidor padrão é
-`wss://chess.filipenos.com`. Use `--local` para
-`ws://localhost:6464`, ou `--server <URL>` para outra instalação. O workspace está
-parcialmente preparado para virar um pacote; somente depois da primeira publicação
-será possível executar `npx llm-game-arena ...` sem clonar o projeto.
+O servidor padrão é `wss://chess.filipenos.com`. Use `--local` para
+`ws://localhost:6464`, ou `--server <URL>` para outra instalação. Durante o
+desenvolvimento no monorepo, `npm run play -- <player> <session>` continua disponível.
 
 Opções comuns:
 
@@ -91,14 +88,14 @@ uma cor disponível; se apenas uma estiver livre, ela será escolhida automatica
 ## Random Player
 
 ```bash
-npm run play -- random K7P4QX --seat white --name Random-A
-npm run play -- random K7P4QX --seat black --name Random-B
+npx llm-game-arena random K7P4QX --seat white --name Random-A
+npx llm-game-arena random K7P4QX --seat black --name Random-B
 ```
 
 Para jogar contra uma pessoa que já ocupou um assento:
 
 ```bash
-npm run play -- random K7P4QX
+npx llm-game-arena random K7P4QX
 ```
 
 ## Ollama Player
@@ -106,7 +103,7 @@ npm run play -- random K7P4QX
 Com o Ollama em execução e o modelo disponível:
 
 ```bash
-npm run play -- ollama K7P4QX --seat black --model qwen3:8b --name Qwen
+npx llm-game-arena ollama K7P4QX --seat black --model qwen3:8b --name Qwen
 ```
 
 Se o Ollama exceder o timeout ou devolver duas respostas inválidas, o player escolhe
@@ -120,7 +117,7 @@ efêmera, em sandbox somente leitura e com saída validada por JSON Schema.
 ```bash
 codex login status
 
-npm run play -- codex K7P4QX --seat black --name Codex --model gpt-5.6-sol
+npx llm-game-arena codex K7P4QX --seat black --name Codex --model gpt-5.6-sol
 ```
 
 Use `--model <modelo>` para sobrescrever o modelo configurado na CLI. Sem essa opção,
@@ -136,7 +133,7 @@ a sessão não é persistida e a resposta é validada por JSON Schema.
 ```bash
 claude auth status
 
-npm run play -- claude K7P4QX --seat black --model sonnet --name Claude
+npx llm-game-arena claude K7P4QX --seat black --model sonnet --name Claude
 ```
 
 Codex, Claude e OpenRouter têm timeout padrão de 50 segundos por tentativa. Se a CLI
@@ -152,7 +149,7 @@ catálogo OpenRouter:
 ```bash
 export OPENROUTER_API_KEY="sua-chave"
 
-npm run play -- openrouter K7P4QX \
+npx llm-game-arena openrouter K7P4QX \
   --model nvidia/nemotron-3-super-120b-a12b:free --name Nemotron
 ```
 
@@ -301,11 +298,6 @@ e nunca é retornada pelas ferramentas.
 
 ### Distribuição opcional
 
-- Definir a distribuição da CLI fora do repositório e publicar a primeira versão no
-  npmjs. Antes da release: confirmar nome e ownership do pacote, licença, dependências
-  de runtime, versionamento e changelog; configurar publicação confiável pela CI com
-  provenance e validar instalação global e `npx` em ambiente limpo. A declaração dos
-  binários no workspace ainda não significa que eles estejam publicados.
 - Avaliar separadamente a publicação do servidor MCP no npm.
 - Oferecer MCP remoto via Streamable HTTP. Antes de publicar, definir autenticação,
   isolamento das conexões, rate limiting, observabilidade e proteção contra abuso;
@@ -340,6 +332,23 @@ No GitHub, pull requests executam testes e build sem acesso a credenciais. Commi
 na branch `main` que passam nessas verificações aplicam as migrações D1 e publicam
 o Worker pela GitHub Action. A integração Git da Cloudflare deve permanecer
 desativada para não gerar dois deploys para o mesmo commit.
+
+## Publicações pelo CI
+
+Aplicação e CLI usam gatilhos independentes para evitar releases acidentais:
+
+- Todo merge na `main` executa qualidade, aplica as migrações D1 e publica a
+  aplicação em `chess.filipenos.com`.
+- Uma GitHub Release com tag igual à versão da CLI, por exemplo `v0.2.1`, executa
+  novamente as verificações e publica essa versão no npm.
+- Depois de o workflow `publish-npm.yml` entrar na `main` e ser cadastrado como
+  Trusted Publisher no npm, as próximas releases usarão OIDC sem token permanente
+  no GitHub e receberão provenance automaticamente. A versão inicial `0.2.0` foi a
+  publicação manual usada para registrar o nome do pacote.
+
+Antes de criar uma GitHub Release, atualize a versão de
+`apps/player-cli/package.json` e o `CHANGELOG.md`. Não reutilize uma tag ou versão já
+publicada; o npm não permite sobrescrever releases.
 
 ## Comandos de qualidade
 
