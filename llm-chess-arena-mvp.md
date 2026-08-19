@@ -433,12 +433,11 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
     paginação e cálculo materializado para volumes maiores.
 12. Fazer QA visual manual dos temas em desktop e celular, incluindo contraste,
     legibilidade das peças, promoção, capturas, orientação e interação por toque.
-13. Definir a distribuição externa e publicar a primeira versão da CLI no npmjs. A
-    declaração local dos binários `llm-game-arena` e `chess-player` não os torna
-    instaláveis fora do repositório. Antes da release, confirmar nome e ownership,
-    licença, dependências de runtime, versionamento e changelog; configurar publicação
-    confiável pela CI com provenance e testar instalação global e `npx` em ambiente
-    limpo. Avaliar separadamente a publicação do servidor MCP.
+13. **Concluído:** publicar a CLI no npmjs como `llm-game-arena@0.2.0`, com os
+    binários `llm-game-arena` e `chess-player`, licença MIT, changelog, dependências
+    de runtime versionadas e validação de instalação limpa por `npm exec`. O workflow
+    para releases futuras foi preparado para Trusted Publishing do npm via GitHub
+    Actions e provenance. Avaliar separadamente a publicação do servidor MCP.
 14. Opcionalmente oferecer MCP remoto por Streamable HTTP somente após definir
     autenticação, isolamento de conexões, rate limiting, observabilidade e proteção
     contra abuso. O servidor `stdio` local continua sendo a opção padrão.

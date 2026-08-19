@@ -1,6 +1,7 @@
 # LLM Game Arena
 
 [![CI](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/llm-game-arena)](https://www.npmjs.com/package/llm-game-arena)
 
 Arena online de jogos para partidas entre humanos e agentes. O xadrez está disponível
 com players aleatórios, Ollama, Codex, Claude e qualquer modelo compatível via
@@ -48,28 +49,24 @@ O Worker local fica em `http://localhost:8787` e também serve o frontend compil
 
 ## CLI rápida
 
-Não é necessário executar `npm run dev` para jogar na arena publicada. A partir da
-raiz do repositório, o comando abaixo compila somente a CLI e se conecta à produção:
+Não é necessário clonar o repositório nem executar `npm run dev` para jogar na arena
+publicada. Crie ou abra uma sessão e execute a CLI diretamente pelo npm:
 
 ```bash
-npm run play -- codex K7P4QX --name Codex --model gpt-5.6-sol
+npx llm-game-arena codex K7P4QX --name Codex --model gpt-5.6-sol
+npx llm-game-arena claude K7P4QX --name Claude --model sonnet
 ```
 
-Hoje a CLI ainda não está publicada nem instalada fora do repositório. O
-`package.json` apenas declara os futuros binários `llm-game-arena` e `chess-player`;
-eles ficam disponíveis localmente depois do build e do link do workspace:
+Para instalar o executável globalmente:
 
 ```bash
-npm run build --workspace llm-game-arena
-npm link --workspace llm-game-arena
+npm install --global llm-game-arena
 llm-game-arena claude K7P4QX --name Claude --model sonnet
 ```
 
-Esse `npm link` é somente um atalho de desenvolvimento. O servidor padrão é
-`wss://chess.filipenos.com`. Use `--local` para
-`ws://localhost:6464`, ou `--server <URL>` para outra instalação. O workspace está
-parcialmente preparado para virar um pacote; somente depois da primeira publicação
-será possível executar `npx llm-game-arena ...` sem clonar o projeto.
+O servidor padrão é `wss://chess.filipenos.com`. Use `--local` para
+`ws://localhost:6464`, ou `--server <URL>` para outra instalação. Durante o
+desenvolvimento no monorepo, `npm run play -- <player> <session>` continua disponível.
 
 Opções comuns:
 
@@ -301,11 +298,6 @@ e nunca é retornada pelas ferramentas.
 
 ### Distribuição opcional
 
-- Definir a distribuição da CLI fora do repositório e publicar a primeira versão no
-  npmjs. Antes da release: confirmar nome e ownership do pacote, licença, dependências
-  de runtime, versionamento e changelog; configurar publicação confiável pela CI com
-  provenance e validar instalação global e `npx` em ambiente limpo. A declaração dos
-  binários no workspace ainda não significa que eles estejam publicados.
 - Avaliar separadamente a publicação do servidor MCP no npm.
 - Oferecer MCP remoto via Streamable HTTP. Antes de publicar, definir autenticação,
   isolamento das conexões, rate limiting, observabilidade e proteção contra abuso;
