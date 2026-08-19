@@ -660,6 +660,11 @@ function PlayerCard({
   pieceSet: PieceSet
   progress: PlayerProgress[]
 }) {
+  const tokenUsage = player?.tokenUsage ?? {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0
+  }
   return (
     <article className="player-card">
       <p className="eyebrow">{label}</p>
@@ -674,12 +679,12 @@ function PlayerCard({
           {player.agent.model === "default"
             ? " · modelo padrão da CLI"
             : player.agent.model ? ` · ${player.agent.model}` : " · modelo não informado"}
-          {player.tokenUsage.totalTokens > 0 && (
+          {tokenUsage.totalTokens > 0 && (
             <span
               className="token-usage"
-              title={`${player.tokenUsage.inputTokens} entrada · ${player.tokenUsage.outputTokens} saída · ${player.tokenUsage.totalTokens} total`}
+              title={`${tokenUsage.inputTokens} entrada · ${tokenUsage.outputTokens} saída · ${tokenUsage.totalTokens} total`}
             >
-              {` · ${compactTokens(player.tokenUsage.totalTokens)} tok · ↓${compactTokens(player.tokenUsage.inputTokens)} ↑${compactTokens(player.tokenUsage.outputTokens)}`}
+              {` · ${compactTokens(tokenUsage.totalTokens)} tok · ↓${compactTokens(tokenUsage.inputTokens)} ↑${compactTokens(tokenUsage.outputTokens)}`}
             </span>
           )}
         </p>

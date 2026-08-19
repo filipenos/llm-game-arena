@@ -108,7 +108,7 @@ export interface PublicParticipant {
   activity: PlayerActivity
   identityId?: string
   agent?: AgentMetadata
-  tokenUsage: TokenUsage
+  tokenUsage?: TokenUsage
 }
 
 export interface PublicGame {

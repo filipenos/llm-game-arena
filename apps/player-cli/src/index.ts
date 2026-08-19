@@ -222,7 +222,7 @@ async function main(): Promise<void> {
       const participant = [event.session.white, event.session.black].find(
         candidate => candidate?.id === participantId
       )
-      if (participant) Object.assign(usage, participant.tokenUsage)
+      if (participant?.tokenUsage) Object.assign(usage, participant.tokenUsage)
     }
     logEvent(event, participantId, options.language, usage)
     if (event.type === "connection.accepted" && event.resumeToken && event.color) {
