@@ -75,6 +75,7 @@ label { color: #c9c1b3; font-size: 0.85rem; font-weight: 650; }
 .player-card h2 { margin: 0; font-family: Georgia, serif; font-size: 1.5rem; font-weight: 500; }
 .player-meta { color: #958c7e; font-size: 0.78rem; }
 .agent-meta { overflow-wrap: anywhere; margin: -0.2rem 0 0; color: #b8d57b; font-size: 0.68rem; line-height: 1.4; }
+.token-usage { color: #958c7e; white-space: nowrap; }
 .player-progress { display: grid; gap: 0.35rem; margin: 0.75rem 0 0; padding: 0; list-style: none; }
 .player-progress li { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; color: #d8d0c2; font-size: 0.72rem; }
 .player-progress li::before { width: 0.4rem; height: 0.4rem; flex: 0 0 auto; border-radius: 50%; background: #b8d57b; content: ""; }

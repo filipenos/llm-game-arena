@@ -12,7 +12,8 @@ import type {
   PlayerActivity,
   PlayerProgress,
   SessionSnapshot,
-  SessionStatus
+  SessionStatus,
+  TokenUsage
 } from "@llm-chess/protocol"
 import { DomainError } from "./domain.js"
 
@@ -30,6 +31,7 @@ export interface ParticipantRecord {
   connectionId?: string
   identityId?: string
   agent?: AgentMetadata
+  tokenUsage: TokenUsage
 }
 
 export interface SessionRecord {
@@ -58,6 +60,7 @@ export interface PersistedParticipant {
   resumeToken: string
   identityId?: string
   agent?: AgentMetadata
+  tokenUsage?: TokenUsage
 }
 
 export interface PersistedSession {
@@ -250,6 +253,7 @@ export class SessionManager {
       connected: true,
       ready: false,
       activity: "idle",
+      tokenUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       resumeToken: secureToken(),
       ...(input.type === "agent" && input.identityToken && input.agent ? {
         identityId: agentIdentityId(input.identityToken),
@@ -278,6 +282,15 @@ export class SessionManager {
   }
 
   addProgress(session: SessionRecord, progress: PlayerProgress): void {
+    const participant = [session.white, session.black].find(
+      candidate => candidate?.id === progress.participantId
+    )
+    if (participant) {
+      participant.tokenUsage.inputTokens += progress.inputTokens ?? 0
+      participant.tokenUsage.outputTokens += progress.outputTokens ?? 0
+      participant.tokenUsage.totalTokens = participant.tokenUsage.inputTokens
+        + participant.tokenUsage.outputTokens
+    }
     session.progress.push(progress)
     session.progress = session.progress.slice(-60)
     this.touch(session)
@@ -410,6 +423,7 @@ export class SessionManager {
       connected: participant.connected,
       ready: participant.ready,
       activity: participant.activity,
+      tokenUsage: { ...participant.tokenUsage },
       ...(participant.identityId ? { identityId: participant.identityId } : {}),
       ...(participant.agent ? { agent: { ...participant.agent } } : {})
     }
@@ -424,6 +438,7 @@ export class SessionManager {
       ready: participant.ready,
       activity: participant.activity,
       resumeToken: participant.resumeToken,
+      tokenUsage: { ...participant.tokenUsage },
       ...(participant.identityId ? { identityId: participant.identityId } : {}),
       ...(participant.agent ? { agent: { ...participant.agent } } : {})
     }
@@ -432,6 +447,11 @@ export class SessionManager {
   private restoreParticipant(participant: PersistedParticipant): ParticipantRecord {
     return {
       ...participant,
+      tokenUsage: participant.tokenUsage ?? {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0
+      },
       connected: false
     }
   }

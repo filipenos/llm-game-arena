@@ -1,4 +1,4 @@
-import type { GameResult } from "@llm-chess/protocol"
+import type { GameResult, TokenUsage } from "@llm-chess/protocol"
 
 export function formatGameFinished(result: GameResult, language: "pt" | "en"): string {
   if (language === "en") {
@@ -19,4 +19,14 @@ export function formatGameFinished(result: GameResult, language: "pt" | "en"): s
     ? "brancas"
     : result.winner === "black" ? "pretas" : "empate"
   return `Partida encerrada: ${reason}; vencedor: ${winner}.`
+}
+
+export function formatTokenUsage(usage: TokenUsage, language: "pt" | "en"): string {
+  const locale = language === "pt" ? "pt-BR" : "en-US"
+  const input = usage.inputTokens.toLocaleString(locale)
+  const output = usage.outputTokens.toLocaleString(locale)
+  const total = usage.totalTokens.toLocaleString(locale)
+  return language === "pt"
+    ? `Tokens: ↓${input} entrada · ↑${output} saída · Σ${total}.`
+    : `Tokens: ↓${input} input · ↑${output} output · Σ${total}.`
 }

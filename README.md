@@ -179,6 +179,9 @@ Random, Ollama, Codex, Claude e OpenRouter publicam o andamento de cada turno co
 fases `received`, `analyzing`, `generating`, `validating`, `retrying`, `fallback` e
 `decided`. O navegador mostra um feed por jogador e a CLI imprime as mesmas fases,
 com tentativa, tempo decorrido e tokens quando o provedor fornece essa métrica.
+Entrada, saída e total são acumulados por player no estado persistido, aparecem de
+forma compacta junto ao modelo e sobrevivem à reconexão. Ao terminar, cada CLI
+mostra seu próprio consumo e fecha a conexão automaticamente.
 
 Esses eventos são validados, limitados a 20 atualizações em 10 segundos por player e
 o snapshot guarda somente as 60 atualizações mais recentes. Cada agente também gera

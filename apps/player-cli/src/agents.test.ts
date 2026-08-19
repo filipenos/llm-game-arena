@@ -10,7 +10,7 @@ import {
   type AgentOptions,
   type CommandRunner
 } from "./agents.js"
-import { formatGameFinished } from "./messages.js"
+import { formatGameFinished, formatTokenUsage } from "./messages.js"
 
 const context: TurnContext = {
   gameId: "game",
@@ -36,6 +36,11 @@ describe("CLI agents", () => {
     expect(formatGameFinished(result, "en")).toBe(
       "Game finished: threefold-repetition; winner: draw."
     )
+    expect(formatTokenUsage({
+      inputTokens: 1_234,
+      outputTokens: 56,
+      totalTokens: 1_290
+    }, "pt")).toBe("Tokens: ↓1.234 entrada · ↑56 saída · Σ1.290.")
   })
 
   it("streams command output by line while preserving the complete result", async () => {

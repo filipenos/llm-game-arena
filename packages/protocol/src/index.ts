@@ -68,6 +68,12 @@ export interface PlayerProgressMetrics {
   outputTokens?: number
 }
 
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+}
+
 export interface PlayerProgress extends PlayerProgressMetrics {
   participantId: string
   color: Color
@@ -102,6 +108,7 @@ export interface PublicParticipant {
   activity: PlayerActivity
   identityId?: string
   agent?: AgentMetadata
+  tokenUsage: TokenUsage
 }
 
 export interface PublicGame {

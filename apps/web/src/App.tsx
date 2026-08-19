@@ -674,6 +674,14 @@ function PlayerCard({
           {player.agent.model === "default"
             ? " · modelo padrão da CLI"
             : player.agent.model ? ` · ${player.agent.model}` : " · modelo não informado"}
+          {player.tokenUsage.totalTokens > 0 && (
+            <span
+              className="token-usage"
+              title={`${player.tokenUsage.inputTokens} entrada · ${player.tokenUsage.outputTokens} saída · ${player.tokenUsage.totalTokens} total`}
+            >
+              {` · ${compactTokens(player.tokenUsage.totalTokens)} tok · ↓${compactTokens(player.tokenUsage.inputTokens)} ↑${compactTokens(player.tokenUsage.outputTokens)}`}
+            </span>
+          )}
         </p>
       )}
       {player?.agent && progress.length > 0 && (
@@ -975,12 +983,24 @@ function progressPhaseLabel(phase: PlayerProgress["phase"]): string {
 
 function progressMetrics(progress: PlayerProgress): string {
   return [
-    progress.attempt ? `tentativa ${progress.attempt}` : "",
-    progress.elapsedMs !== undefined ? `${progress.elapsedMs} ms` : "",
-    progress.durationMs !== undefined ? `${progress.durationMs} ms provedor` : "",
-    progress.inputTokens !== undefined ? `${progress.inputTokens} entrada` : "",
-    progress.outputTokens !== undefined ? `${progress.outputTokens} saída` : ""
+    progress.attempt ? `${progress.attempt}ª` : "",
+    progress.elapsedMs !== undefined ? formatMilliseconds(progress.elapsedMs) : "",
+    progress.durationMs !== undefined ? `prov. ${formatMilliseconds(progress.durationMs)}` : "",
+    progress.inputTokens !== undefined ? `↓${compactTokens(progress.inputTokens)}` : "",
+    progress.outputTokens !== undefined ? `↑${compactTokens(progress.outputTokens)}` : ""
   ].filter(Boolean).join(" · ")
+}
+
+function compactTokens(tokens: number): string {
+  if (tokens < 1_000) return String(tokens)
+  if (tokens < 1_000_000) return `${Number((tokens / 1_000).toFixed(tokens < 10_000 ? 1 : 0))}k`
+  return `${Number((tokens / 1_000_000).toFixed(1))}M`
+}
+
+function formatMilliseconds(milliseconds: number): string {
+  return milliseconds < 1_000
+    ? `${milliseconds}ms`
+    : `${Number((milliseconds / 1_000).toFixed(1))}s`
 }
 
 function MoveHistory({ moves }: { moves: ChessMove[] }) {
