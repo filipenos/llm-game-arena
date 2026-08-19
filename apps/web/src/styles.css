@@ -75,6 +75,11 @@ label { color: #c9c1b3; font-size: 0.85rem; font-weight: 650; }
 .player-card h2 { margin: 0; font-family: Georgia, serif; font-size: 1.5rem; font-weight: 500; }
 .player-meta { color: #958c7e; font-size: 0.78rem; }
 .agent-meta { overflow-wrap: anywhere; margin: -0.2rem 0 0; color: #b8d57b; font-size: 0.68rem; line-height: 1.4; }
+.player-progress { display: grid; gap: 0.35rem; margin: 0.75rem 0 0; padding: 0; list-style: none; }
+.player-progress li { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; color: #d8d0c2; font-size: 0.72rem; }
+.player-progress li::before { width: 0.4rem; height: 0.4rem; flex: 0 0 auto; border-radius: 50%; background: #b8d57b; content: ""; }
+.player-progress span { flex: 1; }
+.player-progress small { color: #756d60; font-size: 0.62rem; text-align: right; }
 .captured-pieces { min-height: 2.7rem; margin-top: 0.8rem; }
 .captured-pieces > span { display: block; margin-bottom: 0.2rem; color: #756d60; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
 .captured-pieces > div { display: flex; flex-wrap: wrap; min-height: 1.55rem; }
@@ -137,7 +142,9 @@ label { color: #c9c1b3; font-size: 0.85rem; font-weight: 650; }
 .move-list { margin: 0; padding: 0; list-style: none; }
 .move-list li { display: grid; grid-template-columns: 2rem 1fr 1fr; padding: 0.55rem 0; border-bottom: 1px solid #302c24; font-size: 0.85rem; }
 .move-list span { color: #766e61; }
-.move-list b { font-weight: 600; }
+.move-list b { display: block; font-weight: 600; }
+.move-list div { min-width: 0; padding-right: 0.35rem; }
+.move-list small { display: block; margin-top: 0.2rem; overflow-wrap: anywhere; color: #8f8678; font-size: 0.68rem; font-weight: 400; line-height: 1.35; }
 
 @media (max-width: 900px) {
   .landing { grid-template-columns: 1fr; gap: 2rem; padding: 4rem 0; }

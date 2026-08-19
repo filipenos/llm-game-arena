@@ -4,6 +4,8 @@ import type {
   AgentMetadata,
   Color,
   MoveCommand,
+  PlayerProgressMetrics,
+  PlayerProgressPhase,
   ParticipantType,
   ServerEvent
 } from "@llm-chess/protocol"
@@ -37,7 +39,17 @@ export interface PlayerClientOptions {
   manual?: boolean
 }
 
-type TurnHandler = (context: TurnContext) => Promise<MoveCommand> | MoveCommand
+export interface PlayerDecision {
+  move: MoveCommand
+  commentary?: string
+}
+
+export interface TurnReporter {
+  progress(phase: PlayerProgressPhase, metrics?: PlayerProgressMetrics): void
+}
+
+export type TurnResult = MoveCommand | PlayerDecision
+type TurnHandler = (context: TurnContext, reporter: TurnReporter) => Promise<TurnResult> | TurnResult
 type EventHandler = (event: ServerEvent) => void
 
 export function playerWebSocketUrl(server: string, sessionId: string): URL {
@@ -104,14 +116,15 @@ export class PlayerClient {
     this.send({ type: "game.resign" })
   }
 
-  playMove(command: MoveCommand, expectedPly: number): void {
+  playMove(command: MoveCommand, expectedPly: number, commentary?: string): void {
     if (!this.accepted) throw new Error("Player is not connected")
     this.send({ type: "player.status", status: "decided" })
     this.send({
       type: "move.play",
       requestId: randomUUID(),
       expectedPly,
-      ...command
+      ...command,
+      ...(commentary ? { commentary } : {})
     })
   }
 
@@ -149,6 +162,21 @@ export class PlayerClient {
     if (this.currentTurn === turnKey) return
     this.currentTurn = turnKey
     this.send({ type: "player.status", status: "thinking" })
+    const startedAt = Date.now()
+    const report: TurnReporter["progress"] = (phase, metrics = {}) => {
+      this.send({
+        type: "player.progress",
+        expectedPly: event.ply,
+        phase,
+        elapsedMs: metrics.elapsedMs ?? Date.now() - startedAt,
+        ...(metrics.attempt !== undefined ? { attempt: metrics.attempt } : {}),
+        ...(metrics.durationMs !== undefined ? { durationMs: metrics.durationMs } : {}),
+        ...(metrics.inputTokens !== undefined ? { inputTokens: metrics.inputTokens } : {}),
+        ...(metrics.outputTokens !== undefined ? { outputTokens: metrics.outputTokens } : {})
+      })
+    }
+    report("received")
+    report("analyzing")
 
     const context: TurnContext = {
       gameId: event.gameId,
@@ -159,9 +187,9 @@ export class PlayerClient {
       legalMoves: event.legalMoves
     }
 
-    let command: MoveCommand | undefined
+    let decision: TurnResult | undefined
     try {
-      command = await this.turnHandler?.(context)
+      decision = await this.turnHandler?.(context, { progress: report })
     } catch (error) {
       this.eventHandler?.({
         type: "error",
@@ -170,24 +198,30 @@ export class PlayerClient {
       })
     }
 
+    let command = decision && "move" in decision ? decision.move : decision
+    let commentary = decision && "move" in decision ? decision.commentary : undefined
     const chosenUci = command
       ? `${command.from}${command.to}${command.promotion ?? ""}`
       : ""
     if (!command || !event.legalMoves.includes(chosenUci)) {
+      report("fallback")
       const fallback = event.legalMoves[Math.floor(Math.random() * event.legalMoves.length)]
       command = fallback ? parseUci(fallback) : undefined
+      commentary = undefined
     }
     if (!command) {
       this.resign()
       return
     }
 
+    report("decided")
     this.send({ type: "player.status", status: "decided" })
     this.send({
       type: "move.play",
       requestId: randomUUID(),
       expectedPly: event.ply,
-      ...command
+      ...command,
+      ...(commentary ? { commentary } : {})
     })
   }
 

@@ -2,22 +2,24 @@ import { execFile } from "node:child_process"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { TurnContext } from "@llm-chess/player-sdk"
-import { parseUci, type MoveCommand } from "@llm-chess/protocol"
+import type { PlayerDecision, TurnContext, TurnReporter } from "@llm-chess/player-sdk"
+import { parseUci, type MoveCommand, type PlayerProgressMetrics } from "@llm-chess/protocol"
 
 const decisionSchema = {
   type: "object",
   properties: {
     move: { type: "string", pattern: "^[a-h][1-8][a-h][1-8][qrbn]?$" },
-    memory: { type: "string", maxLength: 500 }
+    memory: { type: "string", maxLength: 500 },
+    commentary: { type: "string", minLength: 1, maxLength: 240 }
   },
-  required: ["move", "memory"],
+  required: ["move", "memory", "commentary"],
   additionalProperties: false
 } as const
 
 interface Decision {
   move: string
   memory: string
+  commentary: string
 }
 
 export interface AgentOptions {
@@ -59,11 +61,11 @@ export const runCommand: CommandRunner = async (command, args, options) => {
   })
 }
 
-export function randomMove(context: TurnContext): MoveCommand {
+export function randomMove(context: TurnContext): PlayerDecision {
   const uci = context.legalMoves[Math.floor(Math.random() * context.legalMoves.length)]
   const move = uci ? parseUci(uci) : undefined
   if (!move) throw new Error("No legal move is available")
-  return move
+  return { move, commentary: "Escolhi aleatoriamente entre as jogadas legais." }
 }
 
 function chessPrompt(context: TurnContext, memory: string, correction = ""): string {
@@ -75,7 +77,8 @@ function chessPrompt(context: TurnContext, memory: string, correction = ""): str
     `Previous strategic memory: ${memory || "none"}`,
     correction,
     "Choose exactly one move from the legal list.",
-    'Return {"move":"e2e4","memory":"A short plan under 500 characters"}.'
+    "The memory is private. The commentary is public and must briefly explain the chosen move without chain-of-thought.",
+    'Return {"move":"e2e4","memory":"A private plan under 500 characters","commentary":"A public summary under 240 characters"}.'
   ].filter(Boolean).join("\n")
 }
 
@@ -83,6 +86,35 @@ function extractJson(content: string): unknown {
   const trimmed = content.trim()
   const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(trimmed)?.[1]
   return JSON.parse((fenced ?? trimmed).trim())
+}
+
+function sanitizeCommentary(commentary: string): string {
+  return [...commentary].map(character => {
+    const code = character.charCodeAt(0)
+    return code <= 31 || code === 127 ? " " : character
+  }).join("").trim().slice(0, 240)
+}
+
+function outputMetrics(content: string): Pick<
+  PlayerProgressMetrics,
+  "durationMs" | "inputTokens" | "outputTokens"
+> {
+  try {
+    const envelope = extractJson(content) as Record<string, unknown>
+    const usage = envelope.usage && typeof envelope.usage === "object"
+      ? envelope.usage as Record<string, unknown>
+      : {}
+    return {
+      ...(typeof envelope.duration_ms === "number"
+        ? { durationMs: Math.round(envelope.duration_ms) } : {}),
+      ...(typeof usage.input_tokens === "number"
+        ? { inputTokens: Math.round(usage.input_tokens) } : {}),
+      ...(typeof usage.output_tokens === "number"
+        ? { outputTokens: Math.round(usage.output_tokens) } : {})
+    }
+  } catch {
+    return {}
+  }
 }
 
 export function parseDecisionOutput(content: string): Decision {
@@ -93,10 +125,15 @@ export function parseDecisionOutput(content: string): Decision {
   }
   if (!candidate || typeof candidate !== "object") throw new Error("Missing structured decision")
   const decision = candidate as Record<string, unknown>
-  if (typeof decision.move !== "string" || typeof decision.memory !== "string") {
-    throw new Error("Decision must contain move and memory strings")
+  if (typeof decision.move !== "string" || typeof decision.memory !== "string"
+    || typeof decision.commentary !== "string" || !decision.commentary.trim()) {
+    throw new Error("Decision must contain move, memory and commentary strings")
   }
-  return { move: decision.move.toLowerCase(), memory: decision.memory.slice(0, 500) }
+  return {
+    move: decision.move.toLowerCase(),
+    memory: decision.memory.slice(0, 500),
+    commentary: sanitizeCommentary(decision.commentary)
+  }
 }
 
 function validateDecision(decision: Decision, context: TurnContext): MoveCommand {
@@ -108,12 +145,17 @@ function validateDecision(decision: Decision, context: TurnContext): MoveCommand
   return move
 }
 
+function publicDecision(decision: Decision, move: MoveCommand): PlayerDecision {
+  return { move, commentary: decision.commentary }
+}
+
 export function createOllamaPlayer(options: AgentOptions) {
   let memory = ""
-  return async (context: TurnContext): Promise<MoveCommand> => {
+  return async (context: TurnContext, reporter?: TurnReporter): Promise<PlayerDecision> => {
     let correction = ""
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
+        reporter?.progress("generating", { attempt: attempt + 1 })
         const response = await fetch(`${options.ollamaUrl}/api/chat`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -127,22 +169,38 @@ export function createOllamaPlayer(options: AgentOptions) {
           signal: AbortSignal.timeout(options.timeout)
         })
         if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`)
-        const payload = await response.json() as { message?: { content?: string } }
+        const payload = await response.json() as {
+          message?: { content?: string }
+          prompt_eval_count?: number
+          eval_count?: number
+          total_duration?: number
+        }
+        reporter?.progress("validating", {
+          attempt: attempt + 1,
+          ...(payload.prompt_eval_count !== undefined
+            ? { inputTokens: payload.prompt_eval_count } : {}),
+          ...(payload.eval_count !== undefined ? { outputTokens: payload.eval_count } : {}),
+          ...(payload.total_duration !== undefined
+            ? { durationMs: Math.round(payload.total_duration / 1_000_000) } : {})
+        })
         const decision = parseDecisionOutput(payload.message?.content ?? "")
         const move = validateDecision(decision, context)
         memory = decision.memory
-        return move
+        return publicDecision(decision, move)
       } catch (error) {
         correction = error instanceof Error ? error.message : "Invalid Ollama response"
+        if (attempt === 0) reporter?.progress("retrying", { attempt: 2 })
       }
     }
     process.stderr.write("Ollama failed twice; using a random legal move.\n")
+    reporter?.progress("fallback", { attempt: 2 })
     return randomMove(context)
   }
 }
 
 interface OpenRouterCompletion {
   choices?: Array<{ message?: { content?: string } }>
+  usage?: { prompt_tokens?: number; completion_tokens?: number }
 }
 
 export function createOpenRouterPlayer(
@@ -154,10 +212,11 @@ export function createOpenRouterPlayer(
     throw new Error("OPENROUTER_API_KEY is required for OpenRouter")
   }
   let memory = ""
-  return async (context: TurnContext): Promise<MoveCommand> => {
+  return async (context: TurnContext, reporter?: TurnReporter): Promise<PlayerDecision> => {
     let correction = ""
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
+        reporter?.progress("generating", { attempt: attempt + 1 })
         const response = await request("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -184,22 +243,31 @@ export function createOpenRouterPlayer(
         })
         if (!response.ok) throw new Error(`OpenRouter returned HTTP ${response.status}`)
         const payload = await response.json() as OpenRouterCompletion
+        reporter?.progress("validating", {
+          attempt: attempt + 1,
+          ...(payload.usage?.prompt_tokens !== undefined
+            ? { inputTokens: payload.usage.prompt_tokens } : {}),
+          ...(payload.usage?.completion_tokens !== undefined
+            ? { outputTokens: payload.usage.completion_tokens } : {})
+        })
         const decision = parseDecisionOutput(payload.choices?.[0]?.message?.content ?? "")
         const move = validateDecision(decision, context)
         memory = decision.memory
-        return move
+        return publicDecision(decision, move)
       } catch (error) {
         correction = error instanceof Error ? error.message : "Invalid OpenRouter response"
+        if (attempt === 0) reporter?.progress("retrying", { attempt: 2 })
       }
     }
     process.stderr.write("OpenRouter failed twice; using a random legal move.\n")
+    reporter?.progress("fallback", { attempt: 2 })
     return randomMove(context)
   }
 }
 
 export function createCodexPlayer(options: AgentOptions, runner: CommandRunner = runCommand) {
   let memory = ""
-  return async (context: TurnContext): Promise<MoveCommand> => {
+  return async (context: TurnContext, reporter?: TurnReporter): Promise<PlayerDecision> => {
     const tempDirectory = await mkdtemp(join(tmpdir(), "llm-chess-codex-"))
     const schemaPath = join(tempDirectory, "decision.schema.json")
     try {
@@ -207,6 +275,7 @@ export function createCodexPlayer(options: AgentOptions, runner: CommandRunner =
       let correction = ""
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
+          reporter?.progress("generating", { attempt: attempt + 1 })
           const args = [
             "exec",
             "--ephemeral",
@@ -222,15 +291,18 @@ export function createCodexPlayer(options: AgentOptions, runner: CommandRunner =
             cwd: tempDirectory,
             input: chessPrompt(context, memory, correction)
           })
+          reporter?.progress("validating", { attempt: attempt + 1 })
           const decision = parseDecisionOutput(output)
           const move = validateDecision(decision, context)
           memory = decision.memory
-          return move
+          return publicDecision(decision, move)
         } catch (error) {
           correction = error instanceof Error ? error.message : "Invalid Codex response"
+          if (attempt === 0) reporter?.progress("retrying", { attempt: 2 })
         }
       }
       process.stderr.write("Codex failed twice; using a random legal move.\n")
+      reporter?.progress("fallback", { attempt: 2 })
       return randomMove(context)
     } finally {
       await rm(tempDirectory, { recursive: true, force: true })
@@ -240,10 +312,11 @@ export function createCodexPlayer(options: AgentOptions, runner: CommandRunner =
 
 export function createClaudePlayer(options: AgentOptions, runner: CommandRunner = runCommand) {
   let memory = ""
-  return async (context: TurnContext): Promise<MoveCommand> => {
+  return async (context: TurnContext, reporter?: TurnReporter): Promise<PlayerDecision> => {
     let correction = ""
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
+        reporter?.progress("generating", { attempt: attempt + 1 })
         const args = [
           "-p",
           "--safe-mode",
@@ -257,15 +330,18 @@ export function createClaudePlayer(options: AgentOptions, runner: CommandRunner 
         const output = await runner(options.claudeCommand ?? "claude", args, {
           timeout: options.timeout
         })
+        reporter?.progress("validating", { attempt: attempt + 1, ...outputMetrics(output) })
         const decision = parseDecisionOutput(output)
         const move = validateDecision(decision, context)
         memory = decision.memory
-        return move
+        return publicDecision(decision, move)
       } catch (error) {
         correction = error instanceof Error ? error.message : "Invalid Claude response"
+        if (attempt === 0) reporter?.progress("retrying", { attempt: 2 })
       }
     }
     process.stderr.write("Claude failed twice; using a random legal move.\n")
+    reporter?.progress("fallback", { attempt: 2 })
     return randomMove(context)
   }
 }

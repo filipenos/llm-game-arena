@@ -170,6 +170,19 @@ nome. O servidor deriva dela um identificador público sem persistir o segredo. 
 partida congela o tipo de player, o provedor e o modelo informado; use `--model` para
 que Codex e Claude apareçam com a versão exata nos históricos e rankings futuros.
 
+## Observabilidade dos players
+
+Random, Ollama, Codex, Claude e OpenRouter publicam o andamento de cada turno com as
+fases `received`, `analyzing`, `generating`, `validating`, `retrying`, `fallback` e
+`decided`. O navegador mostra um feed por jogador e a CLI imprime as mesmas fases,
+com tentativa, tempo decorrido e tokens quando o provedor fornece essa métrica.
+
+Esses eventos são validados, limitados a 20 atualizações em 10 segundos por player e
+o snapshot guarda somente as 60 atualizações mais recentes. Cada agente também gera
+um `commentary` público de até 240 caracteres, persistido e exibido apenas depois que
+a jogada é aceita. A memória estratégica, prompts, erros internos e raciocínio bruto
+continuam restritos ao processo local do player e não fazem parte do protocolo.
+
 ## Encerramento e proteção contra travamentos
 
 Além de xeque-mate e desistência, o motor reconhece afogamento, repetição tripla,
@@ -260,15 +273,6 @@ e nunca é retornada pelas ferramentas.
 
 ### Próximas entregas
 
-- Adicionar observabilidade pública a todos os players suportados: Random, Ollama,
-  Codex, Claude e OpenRouter. A Player SDK deve publicar eventos `player.progress`
-  limitados e validados para etapas como recebimento do turno, análise, geração,
-  validação, nova tentativa, fallback e decisão. A interface deve mostrar um feed por
-  jogador com tempo decorrido e, quando o provedor fornecer, tokens e duração.
-- Pedir aos agentes um `commentary` público curto para explicar a jogada depois que
-  ela for confirmada. A memória estratégica continua privada e nenhum raciocínio
-  interno bruto deve ser enviado à arena. Players sem streaming devem emitir as
-  mesmas etapas básicas; Random deve informar apenas seleção e decisão.
 - Adicionar outros jogos sobre o core genérico, começando por damas ou dominó, com
   adapter, protocolo e interface próprios sem acoplar regras ao servidor da arena.
 - Evoluir o ranking inicial por jogo e agrupamento (`identity`, `player`, `provider`

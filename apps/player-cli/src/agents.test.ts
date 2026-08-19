@@ -25,23 +25,26 @@ const options: AgentOptions = {
 
 describe("CLI agents", () => {
   it("parses direct and Claude structured output", () => {
-    expect(parseDecisionOutput('{"move":"E2E4","memory":"Control center"}')).toEqual({
+    expect(parseDecisionOutput('{"move":"E2E4","memory":"Control center","commentary":"I control the center."}')).toEqual({
       move: "e2e4",
-      memory: "Control center"
+      memory: "Control center",
+      commentary: "I control the center."
     })
     expect(parseDecisionOutput(JSON.stringify({
-      structured_output: { move: "d2d4", memory: "Develop" },
+      structured_output: { move: "d2d4", memory: "Develop", commentary: "I claim space." },
       result: "ignored"
-    }))).toEqual({ move: "d2d4", memory: "Develop" })
+    }))).toEqual({ move: "d2d4", memory: "Develop", commentary: "I claim space." })
   })
 
   it("invokes Codex non-interactively in a read-only sandbox", async () => {
     const runner = vi.fn<CommandRunner>().mockResolvedValue(
-      '{"move":"e2e4","memory":"Control the center"}'
+      '{"move":"e2e4","memory":"Control the center","commentary":"I open the position."}'
     )
     const chooseMove = createCodexPlayer(options, runner)
 
-    await expect(chooseMove(context)).resolves.toEqual({ from: "e2", to: "e4" })
+    await expect(chooseMove(context)).resolves.toEqual({
+      move: { from: "e2", to: "e4" }, commentary: "I open the position."
+    })
     const [command, args, runOptions] = runner.mock.calls[0] ?? []
     expect(command).toBe("codex")
     expect(args).toContain("--ephemeral")
@@ -54,11 +57,21 @@ describe("CLI agents", () => {
 
   it("invokes Claude in print mode with tools disabled", async () => {
     const runner = vi.fn<CommandRunner>().mockResolvedValue(JSON.stringify({
-      structured_output: { move: "d2d4", memory: "Control the center" }
+      structured_output: {
+        move: "d2d4", memory: "Control the center", commentary: "I claim the center."
+      },
+      duration_ms: 750,
+      usage: { input_tokens: 90, output_tokens: 18 }
     }))
     const chooseMove = createClaudePlayer(options, runner)
 
-    await expect(chooseMove(context)).resolves.toEqual({ from: "d2", to: "d4" })
+    const progress = vi.fn()
+    await expect(chooseMove(context, { progress })).resolves.toEqual({
+      move: { from: "d2", to: "d4" }, commentary: "I claim the center."
+    })
+    expect(progress).toHaveBeenCalledWith("validating", {
+      attempt: 1, durationMs: 750, inputTokens: 90, outputTokens: 18
+    })
     const [command, args] = runner.mock.calls[0] ?? []
     expect(command).toBe("claude")
     expect(args).toContain("-p")
@@ -74,24 +87,27 @@ describe("CLI agents", () => {
     const chooseMove = createClaudePlayer(options, runner)
 
     const move = await chooseMove(context)
-    expect(["e2e4", "d2d4"]).toContain(`${move.from}${move.to}`)
+    expect(["e2e4", "d2d4"]).toContain(`${move.move.from}${move.move.to}`)
     expect(runner).toHaveBeenCalledTimes(2)
   })
 
   it("retries an invalid Codex decision with correction context", async () => {
     const runner = vi.fn<CommandRunner>()
-      .mockResolvedValueOnce('{"move":"a2a3","memory":"Invalid plan"}')
-      .mockResolvedValueOnce('{"move":"e2e4","memory":"Control center"}')
+      .mockResolvedValueOnce('{"move":"a2a3","memory":"Invalid plan","commentary":"I develop."}')
+      .mockResolvedValueOnce('{"move":"e2e4","memory":"Control center","commentary":"I open the center."}')
     const chooseMove = createCodexPlayer(options, runner)
 
-    await expect(chooseMove(context)).resolves.toEqual({ from: "e2", to: "e4" })
+    await expect(chooseMove(context)).resolves.toEqual({
+      move: { from: "e2", to: "e4" }, commentary: "I open the center."
+    })
     expect(runner).toHaveBeenCalledTimes(2)
     expect(runner.mock.calls[1]?.[2].input).toContain("Model selected an illegal move")
   })
 
   it("uses OpenRouter structured output with the selected model", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: '{"move":"e2e4","memory":"Develop"}' } }]
+      choices: [{ message: { content: '{"move":"e2e4","memory":"Develop","commentary":"I free my bishop."}' } }],
+      usage: { prompt_tokens: 120, completion_tokens: 20 }
     }), { status: 200, headers: { "content-type": "application/json" } }))
     const chooseMove = createOpenRouterPlayer({
       ...options,
@@ -99,7 +115,13 @@ describe("CLI agents", () => {
       openRouterApiKey: "test-openrouter-key"
     }, request)
 
-    await expect(chooseMove(context)).resolves.toEqual({ from: "e2", to: "e4" })
+    const progress = vi.fn()
+    await expect(chooseMove(context, { progress })).resolves.toEqual({
+      move: { from: "e2", to: "e4" }, commentary: "I free my bishop."
+    })
+    expect(progress).toHaveBeenCalledWith("validating", {
+      attempt: 1, inputTokens: 120, outputTokens: 20
+    })
     expect(request).toHaveBeenCalledTimes(1)
     const [url, requestOptions] = request.mock.calls[0] ?? []
     expect(url).toBe("https://openrouter.ai/api/v1/chat/completions")

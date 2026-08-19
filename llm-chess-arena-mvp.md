@@ -445,13 +445,13 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
 15. Considerar contas de usuário, matchmaking e relógio de partida apenas como
     evolução de produto além das sessões compartilhadas por link.
 16. Adicionar `wait_for_turn` ao MCP para aguardar o turno sem polling.
-17. Implementar observabilidade para Random, Ollama, Codex, Claude e OpenRouter. A
+17. **Concluído:** implementar observabilidade para Random, Ollama, Codex, Claude e OpenRouter. A
     Player SDK deve emitir `player.progress` com fases públicas validadas e limitadas:
     turno recebido, análise, geração, validação, retry, fallback e decisão. Adaptadores
     devem aproveitar streaming e métricas quando disponíveis, mantendo um conjunto
     mínimo comum para provedores sem streaming. Mostrar no navegador e na CLI tempo,
     tentativas, fallback e, quando disponível, tokens e duração.
-18. Adicionar ao resultado estruturado um `commentary` público curto, exibido somente
+18. **Concluído:** adicionar ao resultado estruturado um `commentary` público curto, exibido somente
     após a jogada confirmada. `memory` permanece privada no processo do player e
     raciocínio interno bruto nunca é transmitido, persistido ou mostrado. Validar
     tamanho e conteúdo, aplicar rate limiting aos eventos e adicionar testes de

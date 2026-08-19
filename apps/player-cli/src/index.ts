@@ -86,6 +86,18 @@ function logEvent(event: ServerEvent): void {
     process.stdout.write(`Connected as ${event.color ?? event.role}.\n`)
   } else if (event.type === "move.made") {
     process.stdout.write(`Move ${event.ply}: ${event.move.san}\n`)
+    if (event.move.commentary) process.stdout.write(`  ${event.move.commentary}\n`)
+  } else if (event.type === "player.progress") {
+    const metrics = [
+      event.progress.attempt ? `attempt ${event.progress.attempt}` : "",
+      event.progress.elapsedMs !== undefined ? `${event.progress.elapsedMs}ms` : "",
+      event.progress.durationMs !== undefined ? `${event.progress.durationMs}ms provider` : "",
+      event.progress.inputTokens !== undefined ? `${event.progress.inputTokens} input tokens` : "",
+      event.progress.outputTokens !== undefined ? `${event.progress.outputTokens} output tokens` : ""
+    ].filter(Boolean).join(", ")
+    process.stdout.write(
+      `[${event.progress.color}] ${event.progress.phase}${metrics ? ` (${metrics})` : ""}\n`
+    )
   } else if (event.type === "game.finished") {
     process.stdout.write(`Game finished: ${event.result.reason}; winner: ${event.result.winner ?? "draw"}.\n`)
   } else if (event.type === "error") {

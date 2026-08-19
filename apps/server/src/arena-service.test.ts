@@ -109,6 +109,30 @@ describe("ArenaService", () => {
     expect(turn?.color).toBe("white")
     expect(turn?.legalMoves).toContain("e2e4")
 
+    await arena.handleEvent("white", {
+      type: "player.progress",
+      expectedPly: 0,
+      phase: "generating",
+      attempt: 1,
+      elapsedMs: 12
+    })
+    expect(spectatorEvents.at(-1)).toMatchObject({
+      type: "player.progress",
+      progress: { color: "white", ply: 0, phase: "generating", attempt: 1 }
+    })
+    for (let update = 1; update < 20; update += 1) {
+      await arena.handleEvent("white", {
+        type: "player.progress",
+        expectedPly: 0,
+        phase: "analyzing",
+        elapsedMs: update
+      })
+    }
+    await arena.handleEvent("white", {
+      type: "player.progress", expectedPly: 0, phase: "analyzing"
+    })
+    expect(whiteEvents.at(-1)).toMatchObject({ type: "error", code: "RATE_LIMITED" })
+
     await arena.handleEvent("black", {
       type: "move.play",
       requestId: "wrong-player",
@@ -123,7 +147,8 @@ describe("ArenaService", () => {
       requestId: "white-1",
       expectedPly: 0,
       from: "e2",
-      to: "e4"
+      to: "e4",
+      commentary: "Ocupo o centro e libero o bispo."
     })
 
     expect(session.game?.getActionCount()).toBe(1)
@@ -132,6 +157,8 @@ describe("ArenaService", () => {
       (event): event is Extract<ServerEvent, { type: "session.snapshot" }> => event.type === "session.snapshot"
     )
     expect(snapshot?.game?.moves[0]?.uci).toBe("e2e4")
+    expect(snapshot?.game?.moves[0]?.commentary).toBe("Ocupo o centro e libero o bispo.")
+    expect(snapshot?.game?.progress).toHaveLength(20)
 
     await arena.handleEvent("black", {
       type: "move.play",
