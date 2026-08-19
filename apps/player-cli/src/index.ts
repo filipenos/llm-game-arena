@@ -6,7 +6,8 @@ import {
   createCodexPlayer,
   createOllamaPlayer,
   createOpenRouterPlayer,
-  randomMove
+  randomMove,
+  type AgentLanguage
 } from "./agents.js"
 import { ResumeStore, type ResumeIdentity } from "./resume-store.js"
 
@@ -19,6 +20,7 @@ interface CliOptions {
   model?: string
   ollamaUrl: string
   timeout: number
+  language: AgentLanguage
 }
 
 const PRODUCTION_SERVER = "wss://chess.filipenos.com"
@@ -31,6 +33,7 @@ Options:
   --name NAME           Player name
   --seat white|black    Request a color; omitted means automatic
   --model MODEL         Model name (required for OpenRouter)
+  --language pt|en      Public output language (default: pt)
   --timeout MS          Maximum time for each model attempt
   --ollama-url URL      Ollama API URL (default: http://localhost:11434)
   --help                 Show this help
@@ -69,6 +72,10 @@ function parseArgs(args: string[]): CliOptions {
   }
   const model = option(args, "--model")
   if (mode === "openrouter" && !model) throw new Error("openrouter requires --model")
+  const language = option(args, "--language") ?? "pt"
+  if (language !== "pt" && language !== "en") {
+    throw new Error("--language must be pt or en")
+  }
   return {
     mode: mode as CliOptions["mode"],
     sessionId: parsedSessionId.data,
@@ -77,32 +84,84 @@ function parseArgs(args: string[]): CliOptions {
     ...(seat ? { color: seat as Color } : {}),
     ...(model ? { model } : {}),
     ollamaUrl: option(args, "--ollama-url") ?? "http://localhost:11434",
-    timeout
+    timeout,
+    language
   }
 }
 
-function logEvent(event: ServerEvent): void {
+const progressLabels: Record<AgentLanguage, Record<string, string>> = {
+  pt: {
+    received: "Turno recebido",
+    analyzing: "Analisando",
+    generating: "Consultando o modelo",
+    validating: "Validando jogada",
+    retrying: "Tentando novamente",
+    fallback: "Usando jogada reserva",
+    decided: "Jogada decidida"
+  },
+  en: {
+    received: "Turn received",
+    analyzing: "Analyzing",
+    generating: "Calling model",
+    validating: "Validating move",
+    retrying: "Retrying",
+    fallback: "Using fallback move",
+    decided: "Move decided"
+  }
+}
+
+function logEvent(
+  event: ServerEvent,
+  participantId: string | undefined,
+  language: AgentLanguage
+): void {
   if (event.type === "connection.accepted") {
-    process.stdout.write(`Connected as ${event.color ?? event.role}.\n`)
-  } else if (event.type === "move.made") {
-    process.stdout.write(`Move ${event.ply}: ${event.move.san}\n`)
+    process.stdout.write(language === "pt" ? "Conectado.\n" : "Connected.\n")
+  } else if (event.type === "move.made" && event.participantId === participantId) {
+    process.stdout.write(language === "pt"
+      ? `Jogada ${event.ply}: ${event.move.san}\n`
+      : `Move ${event.ply}: ${event.move.san}\n`)
     if (event.move.commentary) process.stdout.write(`  ${event.move.commentary}\n`)
-  } else if (event.type === "player.progress") {
+  } else if (event.type === "player.progress" && event.progress.participantId === participantId) {
     const metrics = [
-      event.progress.attempt ? `attempt ${event.progress.attempt}` : "",
+      event.progress.attempt
+        ? `${language === "pt" ? "tentativa" : "attempt"} ${event.progress.attempt}` : "",
       event.progress.elapsedMs !== undefined ? `${event.progress.elapsedMs}ms` : "",
-      event.progress.durationMs !== undefined ? `${event.progress.durationMs}ms provider` : "",
-      event.progress.inputTokens !== undefined ? `${event.progress.inputTokens} input tokens` : "",
-      event.progress.outputTokens !== undefined ? `${event.progress.outputTokens} output tokens` : ""
+      event.progress.durationMs !== undefined
+        ? `${event.progress.durationMs}ms ${language === "pt" ? "provedor" : "provider"}` : "",
+      event.progress.inputTokens !== undefined
+        ? `${event.progress.inputTokens} tokens ${language === "pt" ? "de entrada" : "input"}` : "",
+      event.progress.outputTokens !== undefined
+        ? `${event.progress.outputTokens} tokens ${language === "pt" ? "de saída" : "output"}` : ""
     ].filter(Boolean).join(", ")
     process.stdout.write(
-      `[${event.progress.color}] ${event.progress.phase}${metrics ? ` (${metrics})` : ""}\n`
+      `${progressLabels[language][event.progress.phase]}${metrics ? ` (${metrics})` : ""}\n`
     )
   } else if (event.type === "game.finished") {
-    process.stdout.write(`Game finished: ${event.result.reason}; winner: ${event.result.winner ?? "draw"}.\n`)
+    process.stdout.write(language === "pt"
+      ? `Partida encerrada: ${finishReasonPt(event.result.reason)}; vencedor: ${event.result.winner ? colorPt(event.result.winner) : "empate"}.\n`
+      : `Game finished: ${event.result.reason}; winner: ${event.result.winner ?? "draw"}.\n`)
   } else if (event.type === "error") {
     process.stderr.write(`${event.code}: ${event.message}\n`)
   }
+}
+
+function colorPt(color: Color): string {
+  return color === "white" ? "brancas" : "pretas"
+}
+
+function finishReasonPt(reason: string): string {
+  return ({
+    checkmate: "xeque-mate",
+    stalemate: "afogamento",
+    "threefold-repetition": "repetição tripla",
+    "insufficient-material": "material insuficiente",
+    "fifty-move-rule": "regra dos 50 lances",
+    draw: "empate",
+    resignation: "desistência",
+    "turn-timeout": "tempo esgotado",
+    "move-limit": "limite de jogadas"
+  } as Record<string, string>)[reason] ?? reason
 }
 
 async function main(): Promise<void> {
@@ -111,7 +170,9 @@ async function main(): Promise<void> {
     return
   }
   const options = parseArgs(process.argv.slice(2))
-  process.stdout.write(`Joining ${options.sessionId} at ${options.server} as ${options.mode}.\n`)
+  process.stdout.write(options.language === "pt"
+    ? `Entrando em ${options.sessionId} no servidor ${options.server} como ${options.mode}.\n`
+    : `Joining ${options.sessionId} at ${options.server} as ${options.mode}.\n`)
   const identityToken = new AgentIdentityStore().getOrCreate({
     server: options.server,
     mode: options.mode,
@@ -124,7 +185,8 @@ async function main(): Promise<void> {
         : options.mode === "openrouter" ? "openrouter"
         : options.mode === "random" ? "local" : options.mode,
     ...(options.model ? { model: options.model }
-      : options.mode === "ollama" ? { model: "qwen3:8b" } : {})
+      : options.mode === "ollama" ? { model: "qwen3:8b" }
+        : options.mode === "codex" || options.mode === "claude" ? { model: "default" } : {})
   }
   const resumeStore = new ResumeStore()
   const resumeIdentity: ResumeIdentity = {
@@ -135,7 +197,9 @@ async function main(): Promise<void> {
     ...(options.color ? { color: options.color } : {})
   }
   const savedSession = resumeStore.get(resumeIdentity)
-  if (savedSession) process.stdout.write(`Resuming saved ${savedSession.color} seat.\n`)
+  if (savedSession) process.stdout.write(options.language === "pt"
+    ? "Retomando o assento salvo.\n"
+    : "Resuming saved seat.\n")
   const player = new PlayerClient({
     server: options.server,
     sessionId: options.sessionId,
@@ -146,8 +210,10 @@ async function main(): Promise<void> {
     ...(options.color ? { color: options.color } : {}),
     ...(savedSession ? { resumeToken: savedSession.resumeToken } : {})
   })
+  let participantId: string | undefined
   player.onEvent(event => {
-    logEvent(event)
+    if (event.type === "connection.accepted") participantId = event.participantId
+    logEvent(event, participantId, options.language)
     if (event.type === "connection.accepted" && event.resumeToken && event.color) {
       resumeStore.set(resumeIdentity, {
         resumeToken: event.resumeToken,
@@ -160,7 +226,8 @@ async function main(): Promise<void> {
       setTimeout(() => player.close(), 50)
     }
   })
-  const handler = options.mode === "random" ? randomMove
+  const handler = options.mode === "random"
+    ? (context: Parameters<typeof randomMove>[0]) => randomMove(context, options.language)
     : options.mode === "ollama" ? createOllamaPlayer(options)
       : options.mode === "codex" ? createCodexPlayer(options)
         : options.mode === "claude" ? createClaudePlayer(options)

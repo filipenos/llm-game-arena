@@ -20,7 +20,8 @@ const context: TurnContext = {
 const options: AgentOptions = {
   model: "test-model",
   ollamaUrl: "http://localhost:11434",
-  timeout: 10_000
+  timeout: 10_000,
+  language: "pt"
 }
 
 describe("CLI agents", () => {
@@ -53,6 +54,7 @@ describe("CLI agents", () => {
     expect(args).toContain("test-model")
     expect(args?.at(-1)).toBe("-")
     expect(runOptions?.input).toContain("Legal UCI moves")
+    expect(runOptions?.input).toContain("Brazilian Portuguese")
   })
 
   it("invokes Claude in print mode with tools disabled", async () => {

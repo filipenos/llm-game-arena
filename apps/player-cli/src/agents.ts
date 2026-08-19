@@ -22,6 +22,8 @@ interface Decision {
   commentary: string
 }
 
+export type AgentLanguage = "pt" | "en"
+
 export interface AgentOptions {
   model?: string
   ollamaUrl: string
@@ -29,6 +31,7 @@ export interface AgentOptions {
   codexCommand?: string
   claudeCommand?: string
   openRouterApiKey?: string
+  language: AgentLanguage
 }
 
 export interface CommandRunOptions {
@@ -61,14 +64,24 @@ export const runCommand: CommandRunner = async (command, args, options) => {
   })
 }
 
-export function randomMove(context: TurnContext): PlayerDecision {
+export function randomMove(context: TurnContext, language: AgentLanguage = "pt"): PlayerDecision {
   const uci = context.legalMoves[Math.floor(Math.random() * context.legalMoves.length)]
   const move = uci ? parseUci(uci) : undefined
   if (!move) throw new Error("No legal move is available")
-  return { move, commentary: "Escolhi aleatoriamente entre as jogadas legais." }
+  return {
+    move,
+    commentary: language === "pt"
+      ? "Escolhi aleatoriamente entre as jogadas legais."
+      : "I chose randomly from the legal moves."
+  }
 }
 
-function chessPrompt(context: TurnContext, memory: string, correction = ""): string {
+function chessPrompt(
+  context: TurnContext,
+  memory: string,
+  language: AgentLanguage,
+  correction = ""
+): string {
   return [
     "You are a chess move selector. Do not inspect files or use tools.",
     `You are playing ${context.color}.`,
@@ -77,6 +90,9 @@ function chessPrompt(context: TurnContext, memory: string, correction = ""): str
     `Previous strategic memory: ${memory || "none"}`,
     correction,
     "Choose exactly one move from the legal list.",
+    language === "pt"
+      ? "Write the public commentary in Brazilian Portuguese."
+      : "Write the public commentary in English.",
     "The memory is private. The commentary is public and must briefly explain the chosen move without chain-of-thought.",
     'Return {"move":"e2e4","memory":"A private plan under 500 characters","commentary":"A public summary under 240 characters"}.'
   ].filter(Boolean).join("\n")
@@ -149,6 +165,12 @@ function publicDecision(decision: Decision, move: MoveCommand): PlayerDecision {
   return { move, commentary: decision.commentary }
 }
 
+function logFallback(player: string, language: AgentLanguage): void {
+  process.stderr.write(language === "pt"
+    ? `${player} falhou duas vezes; usando uma jogada legal aleatória.\n`
+    : `${player} failed twice; using a random legal move.\n`)
+}
+
 export function createOllamaPlayer(options: AgentOptions) {
   let memory = ""
   return async (context: TurnContext, reporter?: TurnReporter): Promise<PlayerDecision> => {
@@ -163,7 +185,10 @@ export function createOllamaPlayer(options: AgentOptions) {
             model: options.model ?? "qwen3:8b",
             stream: false,
             format: decisionSchema,
-            messages: [{ role: "user", content: chessPrompt(context, memory, correction) }],
+            messages: [{
+              role: "user",
+              content: chessPrompt(context, memory, options.language, correction)
+            }],
             options: { temperature: 0.2 }
           }),
           signal: AbortSignal.timeout(options.timeout)
@@ -192,9 +217,9 @@ export function createOllamaPlayer(options: AgentOptions) {
         if (attempt === 0) reporter?.progress("retrying", { attempt: 2 })
       }
     }
-    process.stderr.write("Ollama failed twice; using a random legal move.\n")
+    logFallback("Ollama", options.language)
     reporter?.progress("fallback", { attempt: 2 })
-    return randomMove(context)
+    return randomMove(context, options.language)
   }
 }
 
@@ -227,7 +252,10 @@ export function createOpenRouterPlayer(
           },
           body: JSON.stringify({
             model: options.model,
-            messages: [{ role: "user", content: chessPrompt(context, memory, correction) }],
+            messages: [{
+              role: "user",
+              content: chessPrompt(context, memory, options.language, correction)
+            }],
             temperature: 0.2,
             response_format: {
               type: "json_schema",
@@ -259,9 +287,9 @@ export function createOpenRouterPlayer(
         if (attempt === 0) reporter?.progress("retrying", { attempt: 2 })
       }
     }
-    process.stderr.write("OpenRouter failed twice; using a random legal move.\n")
+    logFallback("OpenRouter", options.language)
     reporter?.progress("fallback", { attempt: 2 })
-    return randomMove(context)
+    return randomMove(context, options.language)
   }
 }
 
@@ -289,7 +317,7 @@ export function createCodexPlayer(options: AgentOptions, runner: CommandRunner =
           const output = await runner(options.codexCommand ?? "codex", args, {
             timeout: options.timeout,
             cwd: tempDirectory,
-            input: chessPrompt(context, memory, correction)
+            input: chessPrompt(context, memory, options.language, correction)
           })
           reporter?.progress("validating", { attempt: attempt + 1 })
           const decision = parseDecisionOutput(output)
@@ -301,9 +329,9 @@ export function createCodexPlayer(options: AgentOptions, runner: CommandRunner =
           if (attempt === 0) reporter?.progress("retrying", { attempt: 2 })
         }
       }
-      process.stderr.write("Codex failed twice; using a random legal move.\n")
+      logFallback("Codex", options.language)
       reporter?.progress("fallback", { attempt: 2 })
-      return randomMove(context)
+      return randomMove(context, options.language)
     } finally {
       await rm(tempDirectory, { recursive: true, force: true })
     }
@@ -325,7 +353,7 @@ export function createClaudePlayer(options: AgentOptions, runner: CommandRunner 
           "--tools", "",
           "--no-session-persistence",
           ...(options.model ? ["--model", options.model] : []),
-          chessPrompt(context, memory, correction)
+          chessPrompt(context, memory, options.language, correction)
         ]
         const output = await runner(options.claudeCommand ?? "claude", args, {
           timeout: options.timeout
@@ -340,8 +368,8 @@ export function createClaudePlayer(options: AgentOptions, runner: CommandRunner 
         if (attempt === 0) reporter?.progress("retrying", { attempt: 2 })
       }
     }
-    process.stderr.write("Claude failed twice; using a random legal move.\n")
+    logFallback("Claude", options.language)
     reporter?.progress("fallback", { attempt: 2 })
-    return randomMove(context)
+    return randomMove(context, options.language)
   }
 }

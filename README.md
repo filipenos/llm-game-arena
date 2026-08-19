@@ -80,6 +80,7 @@ Opções comuns:
 --seat white|black
 --name "Player name"
 --model MODEL
+--language pt|en
 --ollama-url http://localhost:11434
 ```
 
@@ -123,7 +124,9 @@ npm run play -- codex K7P4QX --seat black --name Codex --model gpt-5.6-sol
 ```
 
 Use `--model <modelo>` para sobrescrever o modelo configurado na CLI. Sem essa opção,
-o Codex usa sua configuração atual.
+o Codex usa sua configuração atual e a interface identifica o modelo como
+**modelo padrão da CLI**. O mesmo vale para Claude. Quando `--model` é informado, o
+valor é enviado à CLI e exibido na interface.
 
 ## Claude Player
 
@@ -182,6 +185,9 @@ o snapshot guarda somente as 60 atualizações mais recentes. Cada agente també
 um `commentary` público de até 240 caracteres, persistido e exibido apenas depois que
 a jogada é aceita. A memória estratégica, prompts, erros internos e raciocínio bruto
 continuam restritos ao processo local do player e não fazem parte do protocolo.
+Cada terminal mostra apenas os eventos e jogadas do seu próprio player, sem repetir
+a atividade do adversário. As explicações e mensagens usam português por padrão;
+use `--language en` para solicitar comentários públicos e saída da CLI em inglês.
 
 ## Encerramento e proteção contra travamentos
 

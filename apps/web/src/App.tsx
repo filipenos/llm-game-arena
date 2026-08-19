@@ -671,7 +671,9 @@ function PlayerCard({
       {player?.agent && (
         <p className="agent-meta">
           {player.agent.player} · {player.agent.provider}
-          {player.agent.model ? ` · ${player.agent.model}` : " · modelo não informado"}
+          {player.agent.model === "default"
+            ? " · modelo padrão da CLI"
+            : player.agent.model ? ` · ${player.agent.model}` : " · modelo não informado"}
         </p>
       )}
       {player?.agent && progress.length > 0 && (
