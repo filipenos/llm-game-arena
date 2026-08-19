@@ -5,6 +5,8 @@ import {
   createCodexPlayer,
   createOpenRouterPlayer,
   parseDecisionOutput,
+  reasoningSummaryFromEvent,
+  runCommand,
   type AgentOptions,
   type CommandRunner
 } from "./agents.js"
@@ -25,6 +27,19 @@ const options: AgentOptions = {
 }
 
 describe("CLI agents", () => {
+  it("streams command output by line while preserving the complete result", async () => {
+    const lines: string[] = []
+    const output = await runCommand(process.execPath, [
+      "-e", "process.stdout.write('primeira\\nsegunda')"
+    ], {
+      timeout: 5_000,
+      onStdoutLine: line => lines.push(line)
+    })
+
+    expect(output).toBe("primeira\nsegunda")
+    expect(lines).toEqual(["primeira", "segunda"])
+  })
+
   it("parses direct and Claude structured output", () => {
     expect(parseDecisionOutput('{"move":"E2E4","memory":"Control center","commentary":"I control the center."}')).toEqual({
       move: "e2e4",
@@ -35,6 +50,29 @@ describe("CLI agents", () => {
       structured_output: { move: "d2d4", memory: "Develop", commentary: "I claim space." },
       result: "ignored"
     }))).toEqual({ move: "d2d4", memory: "Develop", commentary: "I claim space." })
+  })
+
+  it("parses structured decisions and provider reasoning from JSONL", () => {
+    const codexOutput = [
+      JSON.stringify({ type: "item.completed", item: { type: "reasoning", text: "Avalio o centro." } }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          type: "agent_message",
+          text: '{"move":"e2e4","memory":"Center","commentary":"Ocupo o centro."}'
+        }
+      })
+    ].join("\n")
+    expect(reasoningSummaryFromEvent(codexOutput.split("\n")[0] ?? "")).toBe(
+      "Avalio o centro."
+    )
+    expect(parseDecisionOutput(codexOutput)).toMatchObject({
+      move: "e2e4", commentary: "Ocupo o centro."
+    })
+    expect(reasoningSummaryFromEvent(JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "thinking", thinking: "Comparo os lances legais." }] }
+    }))).toBe("Comparo os lances legais.")
   })
 
   it("invokes Codex non-interactively in a read-only sandbox", async () => {
@@ -51,6 +89,7 @@ describe("CLI agents", () => {
     expect(args).toContain("--ephemeral")
     expect(args).toContain("read-only")
     expect(args).toContain("--output-schema")
+    expect(args).toContain("--json")
     expect(args).toContain("test-model")
     expect(args?.at(-1)).toBe("-")
     expect(runOptions?.input).toContain("Legal UCI moves")
@@ -79,6 +118,8 @@ describe("CLI agents", () => {
     expect(args).toContain("-p")
     expect(args).toContain("--safe-mode")
     expect(args).toContain("--json-schema")
+    expect(args).toContain("stream-json")
+    expect(args).toContain("--verbose")
     expect(args).toContain("--no-session-persistence")
     const toolsIndex = args?.indexOf("--tools") ?? -1
     expect(args?.[toolsIndex + 1]).toBe("")

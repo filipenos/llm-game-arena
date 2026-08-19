@@ -226,13 +226,19 @@ async function main(): Promise<void> {
       setTimeout(() => player.close(), 50)
     }
   })
+  const agentOptions = {
+    ...options,
+    onReasoning: (summary: string) => {
+      process.stdout.write(`  ${options.language === "pt" ? "Análise" : "Analysis"}: ${summary}\n`)
+    }
+  }
   const handler = options.mode === "random"
     ? (context: Parameters<typeof randomMove>[0]) => randomMove(context, options.language)
-    : options.mode === "ollama" ? createOllamaPlayer(options)
-      : options.mode === "codex" ? createCodexPlayer(options)
-        : options.mode === "claude" ? createClaudePlayer(options)
+    : options.mode === "ollama" ? createOllamaPlayer(agentOptions)
+      : options.mode === "codex" ? createCodexPlayer(agentOptions)
+        : options.mode === "claude" ? createClaudePlayer(agentOptions)
           : createOpenRouterPlayer({
-              ...options,
+              ...agentOptions,
               openRouterApiKey: process.env.OPENROUTER_API_KEY
             })
   player.onTurn(handler)

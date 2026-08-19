@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process"
+import { spawn } from "node:child_process"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -32,12 +32,14 @@ export interface AgentOptions {
   claudeCommand?: string
   openRouterApiKey?: string
   language: AgentLanguage
+  onReasoning?: (summary: string) => void
 }
 
 export interface CommandRunOptions {
   timeout: number
   cwd?: string
   input?: string
+  onStdoutLine?: (line: string) => void
 }
 
 export type CommandRunner = (
@@ -48,13 +50,35 @@ export type CommandRunner = (
 
 export const runCommand: CommandRunner = async (command, args, options) => {
   return await new Promise<string>((resolve, reject) => {
-    const child = execFile(command, args, {
-      timeout: options.timeout,
+    const child = spawn(command, args, {
       cwd: options.cwd,
-      maxBuffer: 1024 * 1024,
-      encoding: "utf8"
-    }, (error, stdout) => {
-      if (error) {
+      stdio: ["pipe", "pipe", "pipe"]
+    })
+    let stdout = ""
+    let pendingLine = ""
+    let exceededBuffer = false
+    const timeout = setTimeout(() => child.kill("SIGTERM"), options.timeout)
+    child.stdout.setEncoding("utf8")
+    child.stderr.resume()
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk
+      pendingLine += chunk
+      if (stdout.length > 1024 * 1024) {
+        exceededBuffer = true
+        child.kill("SIGTERM")
+      }
+      const lines = pendingLine.split("\n")
+      pendingLine = lines.pop() ?? ""
+      for (const line of lines) options.onStdoutLine?.(line)
+    })
+    child.once("error", error => {
+      clearTimeout(timeout)
+      reject(new Error(`${command} could not start`, { cause: error }))
+    })
+    child.once("close", code => {
+      clearTimeout(timeout)
+      if (pendingLine) options.onStdoutLine?.(pendingLine)
+      if (code !== 0 || exceededBuffer) {
         reject(new Error(`${command} exited unsuccessfully`))
         return
       }
@@ -91,8 +115,8 @@ function chessPrompt(
     correction,
     "Choose exactly one move from the legal list.",
     language === "pt"
-      ? "Write the public commentary in Brazilian Portuguese."
-      : "Write the public commentary in English.",
+      ? "Write the public commentary and any user-visible reasoning summary in Brazilian Portuguese."
+      : "Write the public commentary and any user-visible reasoning summary in English.",
     "The memory is private. The commentary is public and must briefly explain the chosen move without chain-of-thought.",
     'Return {"move":"e2e4","memory":"A private plan under 500 characters","commentary":"A public summary under 240 characters"}.'
   ].filter(Boolean).join("\n")
@@ -104,11 +128,84 @@ function extractJson(content: string): unknown {
   return JSON.parse((fenced ?? trimmed).trim())
 }
 
-function sanitizeCommentary(commentary: string): string {
-  return [...commentary].map(character => {
+function jsonLines(content: string): Array<Record<string, unknown>> {
+  return content.split("\n").flatMap(line => {
+    if (!line.trim()) return []
+    try {
+      const parsed = JSON.parse(line) as unknown
+      return parsed && typeof parsed === "object" ? [parsed as Record<string, unknown>] : []
+    } catch {
+      return []
+    }
+  })
+}
+
+function resultEnvelope(content: string): Record<string, unknown> {
+  try {
+    return extractJson(content) as Record<string, unknown>
+  } catch {
+    const events = jsonLines(content)
+    for (const event of events.reverse()) {
+      const item = event.item && typeof event.item === "object"
+        ? event.item as Record<string, unknown>
+        : undefined
+      if (item?.type === "agent_message" && typeof item.text === "string") {
+        return extractJson(item.text) as Record<string, unknown>
+      }
+      if (event.type === "result") return event
+    }
+    throw new Error("Missing structured decision")
+  }
+}
+
+function textValue(value: unknown): string | undefined {
+  if (typeof value === "string") return value
+  if (!Array.isArray(value)) return undefined
+  const text = value.flatMap(part => {
+    if (typeof part === "string") return [part]
+    if (part && typeof part === "object" && typeof (part as Record<string, unknown>).text === "string") {
+      return [(part as Record<string, unknown>).text as string]
+    }
+    return []
+  }).join(" ")
+  return text || undefined
+}
+
+export function reasoningSummaryFromEvent(line: string): string | undefined {
+  const [event] = jsonLines(line)
+  if (!event) return undefined
+  const item = event.item && typeof event.item === "object"
+    ? event.item as Record<string, unknown>
+    : undefined
+  if (event.type === "item.completed" && item?.type === "reasoning") {
+    return textValue(item.text ?? item.summary)
+  }
+  if (event.type !== "assistant" || !event.message || typeof event.message !== "object") {
+    return undefined
+  }
+  const content = (event.message as Record<string, unknown>).content
+  if (!Array.isArray(content)) return undefined
+  const thinking = content.flatMap(block => {
+    if (!block || typeof block !== "object") return []
+    const typed = block as Record<string, unknown>
+    return typed.type === "thinking" && typeof typed.thinking === "string"
+      ? [typed.thinking]
+      : []
+  }).join(" ")
+  return thinking || undefined
+}
+
+function sanitizeText(text: string, maxLength: number): string {
+  return [...text].map(character => {
     const code = character.charCodeAt(0)
     return code <= 31 || code === 127 ? " " : character
-  }).join("").trim().slice(0, 240)
+  }).join("").trim().slice(0, maxLength)
+}
+
+function emitReasoning(options: AgentOptions, summary: string | undefined): void {
+  if (!summary) return
+  const sanitized = sanitizeText(summary, 500)
+  if (sanitized) options.onReasoning?.(sanitized)
 }
 
 function outputMetrics(content: string): Pick<
@@ -116,10 +213,13 @@ function outputMetrics(content: string): Pick<
   "durationMs" | "inputTokens" | "outputTokens"
 > {
   try {
-    const envelope = extractJson(content) as Record<string, unknown>
-    const usage = envelope.usage && typeof envelope.usage === "object"
-      ? envelope.usage as Record<string, unknown>
-      : {}
+    const envelope = resultEnvelope(content)
+    const usageEvent = jsonLines(content).findLast(event => (
+      event.usage !== undefined && typeof event.usage === "object"
+    ))
+    const usageValue = envelope.usage ?? usageEvent?.usage
+    const usage = usageValue && typeof usageValue === "object"
+      ? usageValue as Record<string, unknown> : {}
     return {
       ...(typeof envelope.duration_ms === "number"
         ? { durationMs: Math.round(envelope.duration_ms) } : {}),
@@ -134,7 +234,7 @@ function outputMetrics(content: string): Pick<
 }
 
 export function parseDecisionOutput(content: string): Decision {
-  const envelope = extractJson(content) as Record<string, unknown>
+  const envelope = resultEnvelope(content)
   let candidate: unknown = envelope.structured_output ?? envelope
   if (typeof envelope.result === "string" && !envelope.structured_output) {
     candidate = extractJson(envelope.result)
@@ -148,7 +248,7 @@ export function parseDecisionOutput(content: string): Decision {
   return {
     move: decision.move.toLowerCase(),
     memory: decision.memory.slice(0, 500),
-    commentary: sanitizeCommentary(decision.commentary)
+    commentary: sanitizeText(decision.commentary, 240)
   }
 }
 
@@ -195,11 +295,12 @@ export function createOllamaPlayer(options: AgentOptions) {
         })
         if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`)
         const payload = await response.json() as {
-          message?: { content?: string }
+          message?: { content?: string; thinking?: string }
           prompt_eval_count?: number
           eval_count?: number
           total_duration?: number
         }
+        emitReasoning(options, payload.message?.thinking)
         reporter?.progress("validating", {
           attempt: attempt + 1,
           ...(payload.prompt_eval_count !== undefined
@@ -224,7 +325,7 @@ export function createOllamaPlayer(options: AgentOptions) {
 }
 
 interface OpenRouterCompletion {
-  choices?: Array<{ message?: { content?: string } }>
+  choices?: Array<{ message?: { content?: string; reasoning?: string } }>
   usage?: { prompt_tokens?: number; completion_tokens?: number }
 }
 
@@ -271,6 +372,7 @@ export function createOpenRouterPlayer(
         })
         if (!response.ok) throw new Error(`OpenRouter returned HTTP ${response.status}`)
         const payload = await response.json() as OpenRouterCompletion
+        emitReasoning(options, payload.choices?.[0]?.message?.reasoning)
         reporter?.progress("validating", {
           attempt: attempt + 1,
           ...(payload.usage?.prompt_tokens !== undefined
@@ -310,6 +412,7 @@ export function createCodexPlayer(options: AgentOptions, runner: CommandRunner =
             "--sandbox", "read-only",
             "--skip-git-repo-check",
             "--output-schema", schemaPath,
+            "--json",
             "--color", "never",
             ...(options.model ? ["--model", options.model] : []),
             "-"
@@ -317,7 +420,8 @@ export function createCodexPlayer(options: AgentOptions, runner: CommandRunner =
           const output = await runner(options.codexCommand ?? "codex", args, {
             timeout: options.timeout,
             cwd: tempDirectory,
-            input: chessPrompt(context, memory, options.language, correction)
+            input: chessPrompt(context, memory, options.language, correction),
+            onStdoutLine: line => emitReasoning(options, reasoningSummaryFromEvent(line))
           })
           reporter?.progress("validating", { attempt: attempt + 1 })
           const decision = parseDecisionOutput(output)
@@ -348,7 +452,8 @@ export function createClaudePlayer(options: AgentOptions, runner: CommandRunner 
         const args = [
           "-p",
           "--safe-mode",
-          "--output-format", "json",
+          "--output-format", "stream-json",
+          "--verbose",
           "--json-schema", JSON.stringify(decisionSchema),
           "--tools", "",
           "--no-session-persistence",
@@ -356,7 +461,8 @@ export function createClaudePlayer(options: AgentOptions, runner: CommandRunner 
           chessPrompt(context, memory, options.language, correction)
         ]
         const output = await runner(options.claudeCommand ?? "claude", args, {
-          timeout: options.timeout
+          timeout: options.timeout,
+          onStdoutLine: line => emitReasoning(options, reasoningSummaryFromEvent(line))
         })
         reporter?.progress("validating", { attempt: attempt + 1, ...outputMetrics(output) })
         const decision = parseDecisionOutput(output)

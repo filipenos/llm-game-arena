@@ -188,6 +188,11 @@ continuam restritos ao processo local do player e não fazem parte do protocolo.
 Cada terminal mostra apenas os eventos e jogadas do seu próprio player, sem repetir
 a atividade do adversário. As explicações e mensagens usam português por padrão;
 use `--language en` para solicitar comentários públicos e saída da CLI em inglês.
+Quando o provedor expõe uma análise durante a execução, a CLI mostra esse resumo
+logo abaixo de **Consultando o modelo**. Essa saída permanece exclusivamente no
+terminal do próprio player: não entra no protocolo, no snapshot, no histórico nem
+na interface dos espectadores. Codex usa os eventos JSONL de `exec --json`; Claude
+usa `stream-json`; Ollama e OpenRouter usam o campo de análise quando disponível.
 
 ## Encerramento e proteção contra travamentos
 
