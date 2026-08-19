@@ -10,6 +10,7 @@ import {
   type AgentLanguage
 } from "./agents.js"
 import { ResumeStore, type ResumeIdentity } from "./resume-store.js"
+import { formatGameFinished } from "./messages.js"
 
 interface CliOptions {
   mode: "random" | "ollama" | "codex" | "claude" | "openrouter"
@@ -138,30 +139,10 @@ function logEvent(
       `${progressLabels[language][event.progress.phase]}${metrics ? ` (${metrics})` : ""}\n`
     )
   } else if (event.type === "game.finished") {
-    process.stdout.write(language === "pt"
-      ? `Partida encerrada: ${finishReasonPt(event.result.reason)}; vencedor: ${event.result.winner ? colorPt(event.result.winner) : "empate"}.\n`
-      : `Game finished: ${event.result.reason}; winner: ${event.result.winner ?? "draw"}.\n`)
+    process.stdout.write(`${formatGameFinished(event.result, language)}\n`)
   } else if (event.type === "error") {
     process.stderr.write(`${event.code}: ${event.message}\n`)
   }
-}
-
-function colorPt(color: Color): string {
-  return color === "white" ? "brancas" : "pretas"
-}
-
-function finishReasonPt(reason: string): string {
-  return ({
-    checkmate: "xeque-mate",
-    stalemate: "afogamento",
-    "threefold-repetition": "repetição tripla",
-    "insufficient-material": "material insuficiente",
-    "fifty-move-rule": "regra dos 50 lances",
-    draw: "empate",
-    resignation: "desistência",
-    "turn-timeout": "tempo esgotado",
-    "move-limit": "limite de jogadas"
-  } as Record<string, string>)[reason] ?? reason
 }
 
 async function main(): Promise<void> {

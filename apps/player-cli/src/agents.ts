@@ -202,10 +202,12 @@ function sanitizeText(text: string, maxLength: number): string {
   }).join("").trim().slice(0, maxLength)
 }
 
-function emitReasoning(options: AgentOptions, summary: string | undefined): void {
-  if (!summary) return
+function emitReasoning(options: AgentOptions, summary: string | undefined): boolean {
+  if (!summary) return false
   const sanitized = sanitizeText(summary, 500)
-  if (sanitized) options.onReasoning?.(sanitized)
+  if (!sanitized || !options.onReasoning) return false
+  options.onReasoning(sanitized)
+  return true
 }
 
 function outputMetrics(content: string): Pick<
@@ -300,7 +302,9 @@ export function createOllamaPlayer(options: AgentOptions) {
           eval_count?: number
           total_duration?: number
         }
-        emitReasoning(options, payload.message?.thinking)
+        const reasoningEmitted = emitReasoning(options, payload.message?.thinking)
+        const decision = parseDecisionOutput(payload.message?.content ?? "")
+        if (!reasoningEmitted) emitReasoning(options, decision.commentary)
         reporter?.progress("validating", {
           attempt: attempt + 1,
           ...(payload.prompt_eval_count !== undefined
@@ -309,7 +313,6 @@ export function createOllamaPlayer(options: AgentOptions) {
           ...(payload.total_duration !== undefined
             ? { durationMs: Math.round(payload.total_duration / 1_000_000) } : {})
         })
-        const decision = parseDecisionOutput(payload.message?.content ?? "")
         const move = validateDecision(decision, context)
         memory = decision.memory
         return publicDecision(decision, move)
@@ -372,7 +375,12 @@ export function createOpenRouterPlayer(
         })
         if (!response.ok) throw new Error(`OpenRouter returned HTTP ${response.status}`)
         const payload = await response.json() as OpenRouterCompletion
-        emitReasoning(options, payload.choices?.[0]?.message?.reasoning)
+        const reasoningEmitted = emitReasoning(
+          options,
+          payload.choices?.[0]?.message?.reasoning
+        )
+        const decision = parseDecisionOutput(payload.choices?.[0]?.message?.content ?? "")
+        if (!reasoningEmitted) emitReasoning(options, decision.commentary)
         reporter?.progress("validating", {
           attempt: attempt + 1,
           ...(payload.usage?.prompt_tokens !== undefined
@@ -380,7 +388,6 @@ export function createOpenRouterPlayer(
           ...(payload.usage?.completion_tokens !== undefined
             ? { outputTokens: payload.usage.completion_tokens } : {})
         })
-        const decision = parseDecisionOutput(payload.choices?.[0]?.message?.content ?? "")
         const move = validateDecision(decision, context)
         memory = decision.memory
         return publicDecision(decision, move)
@@ -404,6 +411,7 @@ export function createCodexPlayer(options: AgentOptions, runner: CommandRunner =
       await writeFile(schemaPath, JSON.stringify(decisionSchema), { mode: 0o600 })
       let correction = ""
       for (let attempt = 0; attempt < 2; attempt += 1) {
+        let reasoningEmitted = false
         try {
           reporter?.progress("generating", { attempt: attempt + 1 })
           const args = [
@@ -421,10 +429,14 @@ export function createCodexPlayer(options: AgentOptions, runner: CommandRunner =
             timeout: options.timeout,
             cwd: tempDirectory,
             input: chessPrompt(context, memory, options.language, correction),
-            onStdoutLine: line => emitReasoning(options, reasoningSummaryFromEvent(line))
+            onStdoutLine: line => {
+              reasoningEmitted = emitReasoning(options, reasoningSummaryFromEvent(line))
+                || reasoningEmitted
+            }
           })
-          reporter?.progress("validating", { attempt: attempt + 1 })
           const decision = parseDecisionOutput(output)
+          if (!reasoningEmitted) emitReasoning(options, decision.commentary)
+          reporter?.progress("validating", { attempt: attempt + 1, ...outputMetrics(output) })
           const move = validateDecision(decision, context)
           memory = decision.memory
           return publicDecision(decision, move)
@@ -447,6 +459,7 @@ export function createClaudePlayer(options: AgentOptions, runner: CommandRunner 
   return async (context: TurnContext, reporter?: TurnReporter): Promise<PlayerDecision> => {
     let correction = ""
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      let reasoningEmitted = false
       try {
         reporter?.progress("generating", { attempt: attempt + 1 })
         const args = [
@@ -462,10 +475,14 @@ export function createClaudePlayer(options: AgentOptions, runner: CommandRunner 
         ]
         const output = await runner(options.claudeCommand ?? "claude", args, {
           timeout: options.timeout,
-          onStdoutLine: line => emitReasoning(options, reasoningSummaryFromEvent(line))
+          onStdoutLine: line => {
+            reasoningEmitted = emitReasoning(options, reasoningSummaryFromEvent(line))
+              || reasoningEmitted
+          }
         })
-        reporter?.progress("validating", { attempt: attempt + 1, ...outputMetrics(output) })
         const decision = parseDecisionOutput(output)
+        if (!reasoningEmitted) emitReasoning(options, decision.commentary)
+        reporter?.progress("validating", { attempt: attempt + 1, ...outputMetrics(output) })
         const move = validateDecision(decision, context)
         memory = decision.memory
         return publicDecision(decision, move)

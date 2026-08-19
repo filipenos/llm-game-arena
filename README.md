@@ -193,6 +193,9 @@ logo abaixo de **Consultando o modelo**. Essa saída permanece exclusivamente no
 terminal do próprio player: não entra no protocolo, no snapshot, no histórico nem
 na interface dos espectadores. Codex usa os eventos JSONL de `exec --json`; Claude
 usa `stream-json`; Ollama e OpenRouter usam o campo de análise quando disponível.
+Como esses eventos são opcionais, a CLI usa a explicação pública estruturada da
+jogada como fallback. Assim sempre existe uma linha **Análise**, mesmo quando o
+provedor não envia um item separado de reasoning.
 
 ## Encerramento e proteção contra travamentos
 

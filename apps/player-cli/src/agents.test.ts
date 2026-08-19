@@ -10,6 +10,7 @@ import {
   type AgentOptions,
   type CommandRunner
 } from "./agents.js"
+import { formatGameFinished } from "./messages.js"
 
 const context: TurnContext = {
   gameId: "game",
@@ -27,6 +28,16 @@ const options: AgentOptions = {
 }
 
 describe("CLI agents", () => {
+  it("formats finished games in the selected language", () => {
+    const result = { reason: "threefold-repetition" as const, winner: null }
+    expect(formatGameFinished(result, "pt")).toBe(
+      "Partida encerrada: repetição tripla; vencedor: empate."
+    )
+    expect(formatGameFinished(result, "en")).toBe(
+      "Game finished: threefold-repetition; winner: draw."
+    )
+  })
+
   it("streams command output by line while preserving the complete result", async () => {
     const lines: string[] = []
     const output = await runCommand(process.execPath, [
@@ -76,10 +87,11 @@ describe("CLI agents", () => {
   })
 
   it("invokes Codex non-interactively in a read-only sandbox", async () => {
+    const onReasoning = vi.fn()
     const runner = vi.fn<CommandRunner>().mockResolvedValue(
       '{"move":"e2e4","memory":"Control the center","commentary":"I open the position."}'
     )
-    const chooseMove = createCodexPlayer(options, runner)
+    const chooseMove = createCodexPlayer({ ...options, onReasoning }, runner)
 
     await expect(chooseMove(context)).resolves.toEqual({
       move: { from: "e2", to: "e4" }, commentary: "I open the position."
@@ -94,6 +106,7 @@ describe("CLI agents", () => {
     expect(args?.at(-1)).toBe("-")
     expect(runOptions?.input).toContain("Legal UCI moves")
     expect(runOptions?.input).toContain("Brazilian Portuguese")
+    expect(onReasoning).toHaveBeenCalledWith("I open the position.")
   })
 
   it("invokes Claude in print mode with tools disabled", async () => {
