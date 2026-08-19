@@ -88,14 +88,14 @@ uma cor disponível; se apenas uma estiver livre, ela será escolhida automatica
 ## Random Player
 
 ```bash
-npm run play -- random K7P4QX --seat white --name Random-A
-npm run play -- random K7P4QX --seat black --name Random-B
+npx llm-game-arena random K7P4QX --seat white --name Random-A
+npx llm-game-arena random K7P4QX --seat black --name Random-B
 ```
 
 Para jogar contra uma pessoa que já ocupou um assento:
 
 ```bash
-npm run play -- random K7P4QX
+npx llm-game-arena random K7P4QX
 ```
 
 ## Ollama Player
@@ -103,7 +103,7 @@ npm run play -- random K7P4QX
 Com o Ollama em execução e o modelo disponível:
 
 ```bash
-npm run play -- ollama K7P4QX --seat black --model qwen3:8b --name Qwen
+npx llm-game-arena ollama K7P4QX --seat black --model qwen3:8b --name Qwen
 ```
 
 Se o Ollama exceder o timeout ou devolver duas respostas inválidas, o player escolhe
@@ -117,7 +117,7 @@ efêmera, em sandbox somente leitura e com saída validada por JSON Schema.
 ```bash
 codex login status
 
-npm run play -- codex K7P4QX --seat black --name Codex --model gpt-5.6-sol
+npx llm-game-arena codex K7P4QX --seat black --name Codex --model gpt-5.6-sol
 ```
 
 Use `--model <modelo>` para sobrescrever o modelo configurado na CLI. Sem essa opção,
@@ -133,7 +133,7 @@ a sessão não é persistida e a resposta é validada por JSON Schema.
 ```bash
 claude auth status
 
-npm run play -- claude K7P4QX --seat black --model sonnet --name Claude
+npx llm-game-arena claude K7P4QX --seat black --model sonnet --name Claude
 ```
 
 Codex, Claude e OpenRouter têm timeout padrão de 50 segundos por tentativa. Se a CLI
@@ -149,7 +149,7 @@ catálogo OpenRouter:
 ```bash
 export OPENROUTER_API_KEY="sua-chave"
 
-npm run play -- openrouter K7P4QX \
+npx llm-game-arena openrouter K7P4QX \
   --model nvidia/nemotron-3-super-120b-a12b:free --name Nemotron
 ```
 
@@ -332,6 +332,23 @@ No GitHub, pull requests executam testes e build sem acesso a credenciais. Commi
 na branch `main` que passam nessas verificações aplicam as migrações D1 e publicam
 o Worker pela GitHub Action. A integração Git da Cloudflare deve permanecer
 desativada para não gerar dois deploys para o mesmo commit.
+
+## Publicações pelo CI
+
+Aplicação e CLI usam gatilhos independentes para evitar releases acidentais:
+
+- Todo merge na `main` executa qualidade, aplica as migrações D1 e publica a
+  aplicação em `chess.filipenos.com`.
+- Uma GitHub Release com tag igual à versão da CLI, por exemplo `v0.2.1`, executa
+  novamente as verificações e publica essa versão no npm.
+- Depois de o workflow `publish-npm.yml` entrar na `main` e ser cadastrado como
+  Trusted Publisher no npm, as próximas releases usarão OIDC sem token permanente
+  no GitHub e receberão provenance automaticamente. A versão inicial `0.2.0` foi a
+  publicação manual usada para registrar o nome do pacote.
+
+Antes de criar uma GitHub Release, atualize a versão de
+`apps/player-cli/package.json` e o `CHANGELOG.md`. Não reutilize uma tag ou versão já
+publicada; o npm não permite sobrescrever releases.
 
 ## Comandos de qualidade
 
