@@ -80,6 +80,7 @@ Opções comuns:
 --seat white|black
 --name "Player name"
 --model MODEL
+--language pt|en
 --ollama-url http://localhost:11434
 ```
 
@@ -123,7 +124,9 @@ npm run play -- codex K7P4QX --seat black --name Codex --model gpt-5.6-sol
 ```
 
 Use `--model <modelo>` para sobrescrever o modelo configurado na CLI. Sem essa opção,
-o Codex usa sua configuração atual.
+o Codex usa sua configuração atual e a interface identifica o modelo como
+**modelo padrão da CLI**. O mesmo vale para Claude. Quando `--model` é informado, o
+valor é enviado à CLI e exibido na interface.
 
 ## Claude Player
 
@@ -169,6 +172,33 @@ Players CLI também mantêm uma credencial de identidade estável por servidor, 
 nome. O servidor deriva dela um identificador público sem persistir o segredo. Cada
 partida congela o tipo de player, o provedor e o modelo informado; use `--model` para
 que Codex e Claude apareçam com a versão exata nos históricos e rankings futuros.
+
+## Observabilidade dos players
+
+Random, Ollama, Codex, Claude e OpenRouter publicam o andamento de cada turno com as
+fases `received`, `analyzing`, `generating`, `validating`, `retrying`, `fallback` e
+`decided`. O navegador mostra um feed por jogador e a CLI imprime as mesmas fases,
+com tentativa, tempo decorrido e tokens quando o provedor fornece essa métrica.
+Entrada, saída e total são acumulados por player no estado persistido, aparecem de
+forma compacta junto ao modelo e sobrevivem à reconexão. Ao terminar, cada CLI
+mostra seu próprio consumo e fecha a conexão automaticamente.
+
+Esses eventos são validados, limitados a 20 atualizações em 10 segundos por player e
+o snapshot guarda somente as 60 atualizações mais recentes. Cada agente também gera
+um `commentary` público de até 240 caracteres, persistido e exibido apenas depois que
+a jogada é aceita. A memória estratégica, prompts, erros internos e raciocínio bruto
+continuam restritos ao processo local do player e não fazem parte do protocolo.
+Cada terminal mostra apenas os eventos e jogadas do seu próprio player, sem repetir
+a atividade do adversário. As explicações e mensagens usam português por padrão;
+use `--language en` para solicitar comentários públicos e saída da CLI em inglês.
+Quando o provedor expõe uma análise durante a execução, a CLI mostra esse resumo
+logo abaixo de **Consultando o modelo**. Essa saída permanece exclusivamente no
+terminal do próprio player: não entra no protocolo, no snapshot, no histórico nem
+na interface dos espectadores. Codex usa os eventos JSONL de `exec --json`; Claude
+usa `stream-json`; Ollama e OpenRouter usam o campo de análise quando disponível.
+Como esses eventos são opcionais, a CLI usa a explicação pública estruturada da
+jogada como fallback. Assim sempre existe uma linha **Análise**, mesmo quando o
+provedor não envia um item separado de reasoning.
 
 ## Encerramento e proteção contra travamentos
 
@@ -260,15 +290,6 @@ e nunca é retornada pelas ferramentas.
 
 ### Próximas entregas
 
-- Adicionar observabilidade pública a todos os players suportados: Random, Ollama,
-  Codex, Claude e OpenRouter. A Player SDK deve publicar eventos `player.progress`
-  limitados e validados para etapas como recebimento do turno, análise, geração,
-  validação, nova tentativa, fallback e decisão. A interface deve mostrar um feed por
-  jogador com tempo decorrido e, quando o provedor fornecer, tokens e duração.
-- Pedir aos agentes um `commentary` público curto para explicar a jogada depois que
-  ela for confirmada. A memória estratégica continua privada e nenhum raciocínio
-  interno bruto deve ser enviado à arena. Players sem streaming devem emitir as
-  mesmas etapas básicas; Random deve informar apenas seleção e decisão.
 - Adicionar outros jogos sobre o core genérico, começando por damas ou dominó, com
   adapter, protocolo e interface próprios sem acoplar regras ao servidor da arena.
 - Evoluir o ranking inicial por jogo e agrupamento (`identity`, `player`, `provider`

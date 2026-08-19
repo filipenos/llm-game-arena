@@ -20,6 +20,8 @@ export interface ConnectionBinding {
 
 export const TURN_TIMEOUT_MS = 2 * 60 * 1_000
 export const MAX_GAME_PLIES = 300
+const PROGRESS_RATE_WINDOW_MS = 10_000
+const PROGRESS_RATE_LIMIT = 20
 
 export interface ArenaServiceOptions {
   manageTurnTimers?: boolean
@@ -33,6 +35,7 @@ export class ArenaService {
   private readonly bindings = new Map<string, ConnectionBinding>()
   private readonly queues = new Map<string, Promise<void>>()
   private readonly turnTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly progressTimestamps = new Map<string, number[]>()
   private readonly manageTurnTimers: boolean
   private readonly maxGamePlies: number
   private readonly now: () => number
@@ -97,6 +100,7 @@ export class ArenaService {
       try {
         if (event.type === "player.ready") this.handleReady(connectionId)
         else if (event.type === "player.status") this.handleStatus(connectionId, event.status)
+        else if (event.type === "player.progress") this.handleProgress(connectionId, event)
         else if (event.type === "move.play") this.handleMove(connectionId, event)
         else if (event.type === "game.resign") this.handleResign(connectionId)
       } catch (error) {
@@ -250,6 +254,50 @@ export class ArenaService {
     this.broadcastSnapshot(session)
   }
 
+  private handleProgress(
+    connectionId: string,
+    event: Extract<ClientEvent, { type: "player.progress" }>
+  ): void {
+    const { session, participant } = this.requirePlayer(connectionId)
+    const game = session.game
+    if (session.status !== "playing" || !game) {
+      throw new DomainError("GAME_NOT_PLAYING", "The game is not running")
+    }
+    if (event.expectedPly !== game.getActionCount()) {
+      throw new DomainError("STALE_PLY", "The game has advanced since this update was sent")
+    }
+    if (participant.color !== game.getCurrentSeat()) {
+      throw new DomainError("NOT_YOUR_TURN", "Only the active player can report progress")
+    }
+
+    const now = this.now()
+    const recent = (this.progressTimestamps.get(participant.id) ?? [])
+      .filter(timestamp => now - timestamp < PROGRESS_RATE_WINDOW_MS)
+    if (recent.length >= PROGRESS_RATE_LIMIT) {
+      throw new DomainError("RATE_LIMITED", "Too many player progress updates")
+    }
+    recent.push(now)
+    this.progressTimestamps.set(participant.id, recent)
+
+    const progress = {
+      participantId: participant.id,
+      color: participant.color,
+      ply: event.expectedPly,
+      phase: event.phase,
+      at: now,
+      ...(event.attempt !== undefined ? { attempt: event.attempt } : {}),
+      ...(event.elapsedMs !== undefined ? { elapsedMs: event.elapsedMs } : {}),
+      ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+      ...(event.inputTokens !== undefined ? { inputTokens: event.inputTokens } : {}),
+      ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {})
+    }
+    participant.activity = event.phase === "decided" || event.phase === "fallback"
+      ? "decided"
+      : "thinking"
+    this.sessions.addProgress(session, progress)
+    this.broadcast(session, { type: "player.progress", progress })
+  }
+
   private handleMove(
     connectionId: string,
     event: Extract<ClientEvent, { type: "move.play" }>
@@ -285,13 +333,18 @@ export class ArenaService {
     }
 
     session.processedRequestIds.add(event.requestId)
+    const ply = game.getActionCount()
+    if (event.commentary) this.sessions.addMoveCommentary(session, ply, event.commentary)
     participant.activity = "idle"
     this.sessions.touch(session)
+    const move = event.commentary
+      ? { ...result.action, commentary: event.commentary }
+      : result.action
     this.broadcast(session, {
       type: "move.made",
       requestId: event.requestId,
       participantId: participant.id,
-      move: result.action,
+      move,
       fen: game.getPublicState().fen,
       turn: game.getCurrentSeat(),
       ply: game.getActionCount()

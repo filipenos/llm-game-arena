@@ -153,6 +153,17 @@ describe("SessionManager", () => {
     manager.markReady(session, black)
     manager.startGame(session.id, session.controllerToken)
     session.game?.submitAction("white", { from: "e2", to: "e4" })
+    manager.addMoveCommentary(session, 1, "Ocupo o centro.")
+    manager.addProgress(session, {
+      participantId: white.id,
+      color: "white",
+      ply: 0,
+      phase: "decided",
+      at: 123_000,
+      elapsedMs: 900,
+      inputTokens: 120,
+      outputTokens: 30
+    })
     session.turnDeadlineAt = 123_456
 
     const persisted = manager.persistable(session)
@@ -165,6 +176,13 @@ describe("SessionManager", () => {
     expect(restored.white?.connected).toBe(false)
     expect(restored.black?.connected).toBe(false)
     expect(restoredManager.snapshot(restored).game?.moves[0]?.uci).toBe("e2e4")
+    expect(restoredManager.snapshot(restored).game?.moves[0]?.commentary).toBe("Ocupo o centro.")
+    expect(restoredManager.snapshot(restored).game?.progress).toHaveLength(1)
+    expect(restoredManager.snapshot(restored).session.white?.tokenUsage).toEqual({
+      inputTokens: 120,
+      outputTokens: 30,
+      totalTokens: 150
+    })
     expect(JSON.stringify(restoredManager.snapshot(restored))).not.toContain(session.controllerToken)
     expect(JSON.stringify(restoredManager.snapshot(restored))).not.toContain(white.resumeToken)
   })

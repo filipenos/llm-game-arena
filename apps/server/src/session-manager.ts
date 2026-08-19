@@ -10,8 +10,10 @@ import type {
   MoveCommand,
   ParticipantType,
   PlayerActivity,
+  PlayerProgress,
   SessionSnapshot,
-  SessionStatus
+  SessionStatus,
+  TokenUsage
 } from "@llm-chess/protocol"
 import { DomainError } from "./domain.js"
 
@@ -29,6 +31,7 @@ export interface ParticipantRecord {
   connectionId?: string
   identityId?: string
   agent?: AgentMetadata
+  tokenUsage: TokenUsage
 }
 
 export interface SessionRecord {
@@ -43,6 +46,8 @@ export interface SessionRecord {
   game?: ChessGameContract
   turnDeadlineAt?: number
   processedRequestIds: Set<string>
+  progress: PlayerProgress[]
+  moveCommentaries: Map<number, string>
 }
 
 export interface PersistedParticipant {
@@ -55,6 +60,7 @@ export interface PersistedParticipant {
   resumeToken: string
   identityId?: string
   agent?: AgentMetadata
+  tokenUsage?: TokenUsage
 }
 
 export interface PersistedSession {
@@ -72,6 +78,8 @@ export interface PersistedSession {
   }
   turnDeadlineAt?: number
   processedRequestIds: string[]
+  progress?: PlayerProgress[]
+  moveCommentaries?: Array<{ ply: number; commentary: string }>
 }
 
 export interface JoinPlayerInput {
@@ -118,7 +126,9 @@ export class SessionManager {
       status: "waiting",
       controllerToken: secureToken(),
       spectators: new Set(),
-      processedRequestIds: new Set()
+      processedRequestIds: new Set(),
+      progress: [],
+      moveCommentaries: new Map()
     }
     this.sessions.set(id, session)
     return session
@@ -146,7 +156,12 @@ export class SessionManager {
         }
       } : {}),
       ...(session.turnDeadlineAt ? { turnDeadlineAt: session.turnDeadlineAt } : {}),
-      processedRequestIds: [...session.processedRequestIds]
+      processedRequestIds: [...session.processedRequestIds],
+      progress: session.progress,
+      moveCommentaries: [...session.moveCommentaries].map(([ply, commentary]) => ({
+        ply,
+        commentary
+      }))
     }
   }
 
@@ -162,7 +177,11 @@ export class SessionManager {
       ...(persisted.black ? { black: this.restoreParticipant(persisted.black) } : {}),
       ...(persisted.turnDeadlineAt ? { turnDeadlineAt: persisted.turnDeadlineAt } : {}),
       spectators: new Set(),
-      processedRequestIds: new Set(persisted.processedRequestIds)
+      processedRequestIds: new Set(persisted.processedRequestIds),
+      progress: persisted.progress ?? [],
+      moveCommentaries: new Map(
+        (persisted.moveCommentaries ?? []).map(entry => [entry.ply, entry.commentary])
+      )
     }
     if (persisted.game) {
       session.game = this.gameDefinition.create(persisted.game.id)
@@ -234,6 +253,7 @@ export class SessionManager {
       connected: true,
       ready: false,
       activity: "idle",
+      tokenUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       resumeToken: secureToken(),
       ...(input.type === "agent" && input.identityToken && input.agent ? {
         identityId: agentIdentityId(input.identityToken),
@@ -259,6 +279,25 @@ export class SessionManager {
   ): void {
     participant.activity = activity
     this.touch(session)
+  }
+
+  addProgress(session: SessionRecord, progress: PlayerProgress): void {
+    const participant = [session.white, session.black].find(
+      candidate => candidate?.id === progress.participantId
+    )
+    if (participant) {
+      participant.tokenUsage.inputTokens += progress.inputTokens ?? 0
+      participant.tokenUsage.outputTokens += progress.outputTokens ?? 0
+      participant.tokenUsage.totalTokens = participant.tokenUsage.inputTokens
+        + participant.tokenUsage.outputTokens
+    }
+    session.progress.push(progress)
+    session.progress = session.progress.slice(-60)
+    this.touch(session)
+  }
+
+  addMoveCommentary(session: SessionRecord, ply: number, commentary: string): void {
+    session.moveCommentaries.set(ply, commentary)
   }
 
   disconnect(connectionId: string): SessionRecord | undefined {
@@ -321,12 +360,18 @@ export class SessionManager {
               fen: session.game.getPublicState().fen,
               turn: session.game.getCurrentSeat(),
               ply: session.game.getActionCount(),
-              moves: [...session.game.getHistory()],
+              moves: session.game.getHistory().map((move, index) => ({
+                ...move,
+                ...(session.moveCommentaries.get(index + 1)
+                  ? { commentary: session.moveCommentaries.get(index + 1) }
+                  : {})
+              })),
               status: session.status === "finished" ? "finished" as const : "playing" as const,
               ...(session.status === "playing" && session.turnDeadlineAt
                 ? { turnDeadlineAt: session.turnDeadlineAt }
                 : {}),
-              ...(session.game.getOutcome() ? { result: session.game.getOutcome() } : {})
+              ...(session.game.getOutcome() ? { result: session.game.getOutcome() } : {}),
+              progress: session.progress
             }
           }
         : {})
@@ -378,6 +423,7 @@ export class SessionManager {
       connected: participant.connected,
       ready: participant.ready,
       activity: participant.activity,
+      tokenUsage: { ...participant.tokenUsage },
       ...(participant.identityId ? { identityId: participant.identityId } : {}),
       ...(participant.agent ? { agent: { ...participant.agent } } : {})
     }
@@ -392,6 +438,7 @@ export class SessionManager {
       ready: participant.ready,
       activity: participant.activity,
       resumeToken: participant.resumeToken,
+      tokenUsage: { ...participant.tokenUsage },
       ...(participant.identityId ? { identityId: participant.identityId } : {}),
       ...(participant.agent ? { agent: { ...participant.agent } } : {})
     }
@@ -400,6 +447,11 @@ export class SessionManager {
   private restoreParticipant(participant: PersistedParticipant): ParticipantRecord {
     return {
       ...participant,
+      tokenUsage: participant.tokenUsage ?? {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0
+      },
       connected: false
     }
   }

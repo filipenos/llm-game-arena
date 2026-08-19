@@ -35,6 +35,13 @@ describe("parseClientEvent", () => {
     ["invalid promotion", {
       type: "move.play", requestId: "move", expectedPly: 0,
       from: "e7", to: "e8", promotion: "king"
+    }],
+    ["private reasoning in progress", {
+      type: "player.progress", expectedPly: 0, phase: "analyzing", reasoning: "secret"
+    }],
+    ["private memory in a move", {
+      type: "move.play", requestId: "move", expectedPly: 0,
+      from: "e2", to: "e4", commentary: "Public", memory: "private"
     }]
   ])("rejects %s", (_description, event) => {
     expect(() => parseClientEvent(event)).toThrow()
@@ -53,5 +60,26 @@ describe("parseClientEvent", () => {
       identityToken: "stable-secret-identity-token-for-codex",
       agent: { player: "codex", provider: "openai", model: "gpt-5.6-sol" }
     })
+  })
+
+  it("accepts bounded player progress and public move commentary", () => {
+    expect(parseClientEvent({
+      type: "player.progress",
+      expectedPly: 4,
+      phase: "validating",
+      attempt: 2,
+      elapsedMs: 850,
+      durationMs: 700,
+      inputTokens: 120,
+      outputTokens: 24
+    })).toMatchObject({ phase: "validating", attempt: 2 })
+    expect(parseClientEvent({
+      type: "move.play",
+      requestId: "move-5",
+      expectedPly: 4,
+      from: "e2",
+      to: "e4",
+      commentary: "Ocupo o centro."
+    })).toMatchObject({ commentary: "Ocupo o centro." })
   })
 })

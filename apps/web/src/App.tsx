@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type {
   Color,
+  ChessMove,
   LeaderboardResponse,
   Promotion,
   PublicParticipant,
+  PlayerProgress,
   ServerEvent,
   SessionSnapshot,
   SessionSummary
@@ -229,6 +231,14 @@ export function App() {
         } else if (event.type === "session.snapshot") {
           setSnapshot(event)
           setMovePending(false)
+        } else if (event.type === "player.progress") {
+          setSnapshot(current => current?.game ? {
+            ...current,
+            game: {
+              ...current.game,
+              progress: [...current.game.progress, event.progress].slice(-60)
+            }
+          } : current)
         } else if (event.type === "turn.started") {
           setLegalMoves(event.legalMoves)
         } else if (
@@ -448,6 +458,7 @@ export function App() {
             player={snapshot?.session.black ?? null}
             captures={capturedPieces(moves, "black")}
             pieceSet={appearance.pieces}
+            progress={snapshot?.game?.progress.filter(item => item.color === "black") ?? []}
           />
           <div className="versus">VS</div>
           <PlayerCard
@@ -455,6 +466,7 @@ export function App() {
             player={snapshot?.session.white ?? null}
             captures={capturedPieces(moves, "white")}
             pieceSet={appearance.pieces}
+            progress={snapshot?.game?.progress.filter(item => item.color === "white") ?? []}
           />
           {snapshot?.session.status !== "playing" && snapshot?.session.status !== "finished" && (
             <div className="lobby-actions">
@@ -496,7 +508,7 @@ export function App() {
 
         <aside className="history-panel">
           <p className="eyebrow">HISTÓRICO</p>
-          <MoveHistory moves={snapshot?.game?.moves.map(move => move.san) ?? []} />
+          <MoveHistory moves={snapshot?.game?.moves ?? []} />
         </aside>
       </section>
     </main>
@@ -558,17 +570,16 @@ function RecentSessions({ sessions }: { sessions: SessionSummary[] }) {
 
 function InviteHelp({ sessionId }: { sessionId: string }) {
   const commandPrefix = "npm run play --"
-  const serverOption = import.meta.env.DEV ? " --local" : ""
   return (
     <details className="invite-help" open>
       <summary>Convidar pessoas ou LLMs</summary>
       <p>Compartilhe este link. Sem uma cor definida, o servidor sorteia um assento livre:</p>
       <code>{playerInviteUrl(sessionId)}</code>
       <p>Ou conecte um agente pelo terminal:</p>
-      <code>{commandPrefix} codex {sessionId}{serverOption}</code>
-      <code>{commandPrefix} claude {sessionId}{serverOption}</code>
-      <code>{commandPrefix} ollama {sessionId} --model qwen3:8b{serverOption}</code>
-      <code>{commandPrefix} random {sessionId}{serverOption}</code>
+      <code>{commandPrefix} codex {sessionId}</code>
+      <code>{commandPrefix} claude {sessionId}</code>
+      <code>{commandPrefix} ollama {sessionId} --model qwen3:8b</code>
+      <code>{commandPrefix} random {sessionId}</code>
       <p className="help-note">Use <b>--seat white</b> ou <b>--seat black</b> somente quando quiser exigir uma cor.</p>
     </details>
   )
@@ -639,13 +650,20 @@ function PlayerCard({
   label,
   player,
   captures,
-  pieceSet
+  pieceSet,
+  progress
 }: {
   label: string
   player: PublicParticipant | null
   captures: string[]
   pieceSet: PieceSet
+  progress: PlayerProgress[]
 }) {
+  const tokenUsage = player?.tokenUsage ?? {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0
+  }
   return (
     <article className="player-card">
       <p className="eyebrow">{label}</p>
@@ -657,8 +675,28 @@ function PlayerCard({
       {player?.agent && (
         <p className="agent-meta">
           {player.agent.player} · {player.agent.provider}
-          {player.agent.model ? ` · ${player.agent.model}` : " · modelo não informado"}
+          {player.agent.model === "default"
+            ? " · modelo padrão da CLI"
+            : player.agent.model ? ` · ${player.agent.model}` : " · modelo não informado"}
+          {tokenUsage.totalTokens > 0 && (
+            <span
+              className="token-usage"
+              title={`${tokenUsage.inputTokens} entrada · ${tokenUsage.outputTokens} saída · ${tokenUsage.totalTokens} total`}
+            >
+              {` · ${compactTokens(tokenUsage.totalTokens)} tok · ↓${compactTokens(tokenUsage.inputTokens)} ↑${compactTokens(tokenUsage.outputTokens)}`}
+            </span>
+          )}
         </p>
+      )}
+      {player?.agent && progress.length > 0 && (
+        <ol className="player-progress" aria-label={`Atividade de ${player.name}`}>
+          {progress.slice(-4).map((item, index) => (
+            <li key={`${item.ply}-${item.at}-${index}`}>
+              <span>{progressPhaseLabel(item.phase)}</span>
+              <small>{progressMetrics(item)}</small>
+            </li>
+          ))}
+        </ol>
       )}
       <div className="captured-pieces" aria-label={`Peças capturadas por ${player?.name ?? label}`}>
         <span>Capturadas</span>
@@ -935,15 +973,56 @@ function ChessBoard({
   )
 }
 
-function MoveHistory({ moves }: { moves: string[] }) {
+function progressPhaseLabel(phase: PlayerProgress["phase"]): string {
+  return ({
+    received: "Turno recebido",
+    analyzing: "Analisando",
+    generating: "Consultando o modelo",
+    validating: "Validando jogada",
+    retrying: "Tentando novamente",
+    fallback: "Usando jogada reserva",
+    decided: "Jogada decidida"
+  } as Record<PlayerProgress["phase"], string>)[phase]
+}
+
+function progressMetrics(progress: PlayerProgress): string {
+  return [
+    progress.attempt ? `${progress.attempt}ª` : "",
+    progress.elapsedMs !== undefined ? formatMilliseconds(progress.elapsedMs) : "",
+    progress.durationMs !== undefined ? `prov. ${formatMilliseconds(progress.durationMs)}` : "",
+    progress.inputTokens !== undefined ? `↓${compactTokens(progress.inputTokens)}` : "",
+    progress.outputTokens !== undefined ? `↑${compactTokens(progress.outputTokens)}` : ""
+  ].filter(Boolean).join(" · ")
+}
+
+function compactTokens(tokens: number): string {
+  if (tokens < 1_000) return String(tokens)
+  if (tokens < 1_000_000) return `${Number((tokens / 1_000).toFixed(tokens < 10_000 ? 1 : 0))}k`
+  return `${Number((tokens / 1_000_000).toFixed(1))}M`
+}
+
+function formatMilliseconds(milliseconds: number): string {
+  return milliseconds < 1_000
+    ? `${milliseconds}ms`
+    : `${Number((milliseconds / 1_000).toFixed(1))}s`
+}
+
+function MoveHistory({ moves }: { moves: ChessMove[] }) {
   if (moves.length === 0) return <p className="empty-history">Nenhuma jogada.</p>
-  const rows: Array<{ number: number; white: string; black?: string }> = []
+  const rows: Array<{ number: number; white: ChessMove; black?: ChessMove }> = []
   for (let index = 0; index < moves.length; index += 2) {
-    rows.push({ number: index / 2 + 1, white: moves[index] ?? "", ...(moves[index + 1] ? { black: moves[index + 1] } : {}) })
+    const white = moves[index]
+    if (white) rows.push({ number: index / 2 + 1, white, ...(moves[index + 1] ? { black: moves[index + 1] } : {}) })
   }
   return (
     <ol className="move-list">
-      {rows.map(row => <li key={row.number}><span>{row.number}.</span><b>{row.white}</b><b>{row.black ?? "…"}</b></li>)}
+      {rows.map(row => (
+        <li key={row.number}>
+          <span>{row.number}.</span>
+          <div><b>{row.white.san}</b>{row.white.commentary && <small>{row.white.commentary}</small>}</div>
+          <div><b>{row.black?.san ?? "…"}</b>{row.black?.commentary && <small>{row.black.commentary}</small>}</div>
+        </li>
+      ))}
     </ol>
   )
 }

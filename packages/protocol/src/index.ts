@@ -4,11 +4,27 @@ export const colorSchema = z.enum(["white", "black"])
 export const participantTypeSchema = z.enum(["human", "agent", "engine"])
 export const sessionStatusSchema = z.enum(["waiting", "ready", "playing", "finished"])
 export const activitySchema = z.enum(["idle", "thinking", "decided"])
+export const playerProgressPhaseSchema = z.enum([
+  "received",
+  "analyzing",
+  "generating",
+  "validating",
+  "retrying",
+  "fallback",
+  "decided"
+])
 export const squareSchema = z.string().regex(/^[a-h][1-8]$/)
 export const promotionSchema = z.enum(["q", "r", "b", "n"])
 export const sessionIdSchema = z.string().regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/)
 export const tokenSchema = z.string().min(24).max(200)
 export const requestIdSchema = z.string().min(1).max(100)
+const singleLineTextSchema = z.string().trim().min(1).max(240).refine(
+  value => [...value].every(character => {
+    const code = character.charCodeAt(0)
+    return code > 31 && code !== 127
+  }),
+  "Commentary must be one line"
+)
 export const agentMetadataSchema = z.object({
   player: z.enum(["random", "ollama", "codex", "claude", "openai-compatible"]),
   provider: z.string().trim().min(1).max(80),
@@ -19,6 +35,7 @@ export type Color = z.infer<typeof colorSchema>
 export type ParticipantType = z.infer<typeof participantTypeSchema>
 export type SessionStatus = z.infer<typeof sessionStatusSchema>
 export type PlayerActivity = z.infer<typeof activitySchema>
+export type PlayerProgressPhase = z.infer<typeof playerProgressPhaseSchema>
 export type Promotion = z.infer<typeof promotionSchema>
 export type AgentMetadata = z.infer<typeof agentMetadataSchema>
 export const leaderboardGroupSchema = z.enum(["identity", "player", "provider", "model"])
@@ -40,6 +57,29 @@ export interface ChessMove extends MoveCommand {
   captured?: string
   before: string
   after: string
+  commentary?: string
+}
+
+export interface PlayerProgressMetrics {
+  attempt?: number
+  elapsedMs?: number
+  durationMs?: number
+  inputTokens?: number
+  outputTokens?: number
+}
+
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+}
+
+export interface PlayerProgress extends PlayerProgressMetrics {
+  participantId: string
+  color: Color
+  ply: number
+  phase: PlayerProgressPhase
+  at: number
 }
 
 export type GameFinishReason =
@@ -68,6 +108,7 @@ export interface PublicParticipant {
   activity: PlayerActivity
   identityId?: string
   agent?: AgentMetadata
+  tokenUsage?: TokenUsage
 }
 
 export interface PublicGame {
@@ -79,6 +120,7 @@ export interface PublicGame {
   status: "playing" | "finished"
   turnDeadlineAt?: number
   result?: GameResult
+  progress: PlayerProgress[]
 }
 
 export interface SessionSnapshot {
@@ -170,13 +212,24 @@ export const clientEventSchema = z.union([
     status: z.enum(["thinking", "decided", "idle"])
   }),
   z.object({
+    type: z.literal("player.progress"),
+    expectedPly: z.number().int().nonnegative(),
+    phase: playerProgressPhaseSchema,
+    attempt: z.number().int().min(1).max(10).optional(),
+    elapsedMs: z.number().int().min(0).max(600_000).optional(),
+    durationMs: z.number().int().min(0).max(600_000).optional(),
+    inputTokens: z.number().int().min(0).max(10_000_000).optional(),
+    outputTokens: z.number().int().min(0).max(10_000_000).optional()
+  }).strict(),
+  z.object({
     type: z.literal("move.play"),
     requestId: requestIdSchema,
     expectedPly: z.number().int().nonnegative(),
     from: squareSchema,
     to: squareSchema,
-    promotion: promotionSchema.optional()
-  }),
+    promotion: promotionSchema.optional(),
+    commentary: singleLineTextSchema.optional()
+  }).strict(),
   z.object({ type: z.literal("game.resign") })
 ])
 
@@ -197,6 +250,7 @@ export type ErrorCode =
   | "STALE_PLY"
   | "ILLEGAL_MOVE"
   | "DUPLICATE_REQUEST"
+  | "RATE_LIMITED"
   | "UNAUTHORIZED"
   | "SESSION_NOT_READY"
   | "INTERNAL_ERROR"
@@ -220,6 +274,10 @@ export type ServerEvent =
       ply: number
       lastMove?: ChessMove
       legalMoves: string[]
+    }
+  | {
+      type: "player.progress"
+      progress: PlayerProgress
     }
   | {
       type: "move.made"
