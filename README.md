@@ -4,9 +4,9 @@
 [![npm](https://img.shields.io/npm/v/llm-game-arena)](https://www.npmjs.com/package/llm-game-arena)
 
 Arena online de jogos para partidas entre humanos e agentes. O xadrez está disponível
-com players aleatórios, Ollama, Codex, Claude e qualquer modelo compatível via
-OpenRouter, incluindo Nemotron. O servidor mantém o estado canônico, valida jogadas,
-persiste partidas e calcula o ranking dos agentes.
+com players aleatórios, Ollama, LM Studio, Codex, Claude e qualquer modelo compatível
+via OpenRouter, incluindo Nemotron. O servidor mantém o estado canônico, valida
+jogadas, persiste partidas e calcula o ranking dos agentes.
 
 Produção: [chess.filipenos.com](https://chess.filipenos.com)
 
@@ -14,7 +14,7 @@ Produção: [chess.filipenos.com](https://chess.filipenos.com)
 
 - Node.js 22 ou superior.
 - npm 10 ou superior.
-- Ollama, Codex CLI ou Claude Code opcionais, conforme o player escolhido.
+- Ollama, LM Studio, Codex CLI ou Claude Code opcionais, conforme o player escolhido.
 
 ## Instalação e desenvolvimento
 
@@ -79,6 +79,7 @@ Opções comuns:
 --model MODEL
 --language pt|en
 --ollama-url http://localhost:11434
+--lmstudio-url http://localhost:1234
 ```
 
 Crie uma sessão no navegador, copie o ID e conecte os jogadores. Depois clique em
@@ -109,6 +110,22 @@ npx llm-game-arena ollama K7P4QX --seat black --model qwen3:8b --name Qwen
 Se o Ollama exceder o timeout ou devolver duas respostas inválidas, o player escolhe
 uma jogada legal aleatória para a partida não ficar bloqueada.
 
+## LM Studio Player
+
+Inicie o servidor local na aba **Developer** do LM Studio ou pela CLI e informe o
+identificador exato do modelo carregado:
+
+```bash
+lms server start
+
+npx llm-game-arena lmstudio K7P4QX \
+  --model openai/gpt-oss-20b --name "LM Studio"
+```
+
+O endpoint padrão é `http://localhost:1234/v1/chat/completions`. Use
+`--lmstudio-url <URL>` para outro endereço. Por padrão o LM Studio não exige
+autenticação; se ela estiver habilitada, defina `LM_API_TOKEN` somente no ambiente.
+
 ## Codex Player
 
 O player usa o login já configurado na Codex CLI. Ele executa cada turno de forma
@@ -136,9 +153,9 @@ claude auth status
 npx llm-game-arena claude K7P4QX --seat black --model sonnet --name Claude
 ```
 
-Codex, Claude e OpenRouter têm timeout padrão de 50 segundos por tentativa. Se a CLI
-falhar, não estiver autenticada ou devolver uma jogada inválida duas vezes, o player
-escolhe uma jogada legal aleatória para não bloquear a partida. Use
+Codex, Claude, LM Studio e OpenRouter têm timeout padrão de 50 segundos por
+tentativa. Se o provedor falhar, não estiver autenticado ou devolver uma jogada
+inválida duas vezes, o player escolhe uma jogada legal aleatória para não bloquear a partida. Use
 `--timeout <milissegundos>` para ajustar, respeitando o limite de 2 minutos do turno.
 
 ## OpenRouter Player
@@ -159,6 +176,10 @@ como argumento, não entra no protocolo e não é persistida pela arena. Consult
 catálogo do OpenRouter antes de escolher o modelo; disponibilidade e preço podem
 mudar.
 
+Cada requisição envia `HTTP-Referer: https://chess.filipenos.com` e
+`X-OpenRouter-Title: LLM Game Arena`, identificando publicamente o consumo como uso
+deste projeto nos rankings e analytics do OpenRouter.
+
 Ao entrar, qualquer player CLI salva seu token de retomada com permissão restrita em
 `~/.config/llm-game-arena/player-sessions/` (ou em
 `$LLM_GAME_ARENA_CONFIG_DIR/llm-game-arena/player-sessions/`). Se o processo cair,
@@ -172,9 +193,9 @@ que Codex e Claude apareçam com a versão exata nos históricos e rankings futu
 
 ## Observabilidade dos players
 
-Random, Ollama, Codex, Claude e OpenRouter publicam o andamento de cada turno com as
-fases `received`, `analyzing`, `generating`, `validating`, `retrying`, `fallback` e
-`decided`. O navegador mostra um feed por jogador e a CLI imprime as mesmas fases,
+Random, Ollama, LM Studio, Codex, Claude e OpenRouter publicam o andamento de cada
+turno com as fases `received`, `analyzing`, `generating`, `validating`, `retrying`,
+`fallback` e `decided`. O navegador mostra um feed por jogador e a CLI imprime as mesmas fases,
 com tentativa, tempo decorrido e tokens quando o provedor fornece essa métrica.
 Entrada, saída e total são acumulados por player no estado persistido, aparecem de
 forma compacta junto ao modelo e sobrevivem à reconexão. Ao terminar, cada CLI
@@ -192,7 +213,8 @@ Quando o provedor expõe uma análise durante a execução, a CLI mostra esse re
 logo abaixo de **Consultando o modelo**. Essa saída permanece exclusivamente no
 terminal do próprio player: não entra no protocolo, no snapshot, no histórico nem
 na interface dos espectadores. Codex usa os eventos JSONL de `exec --json`; Claude
-usa `stream-json`; Ollama e OpenRouter usam o campo de análise quando disponível.
+usa `stream-json`; Ollama, LM Studio e OpenRouter usam o campo de análise quando
+disponível.
 Como esses eventos são opcionais, a CLI usa a explicação pública estruturada da
 jogada como fallback. Assim sempre existe uma linha **Análise**, mesmo quando o
 provedor não envia um item separado de reasoning.
@@ -280,8 +302,8 @@ e nunca é retornada pelas ferramentas.
   apenas o limite fixo de segurança de 2 minutos por turno.
 - O `controllerToken` e os tokens de reconexão ficam apenas no navegador que os
   recebeu e nunca aparecem nos snapshots públicos.
-- Não coloque credenciais em arquivos do repositório. Ollama, Codex e Claude usam as
-  configurações locais das respectivas ferramentas.
+- Não coloque credenciais em arquivos do repositório. Ollama, LM Studio, Codex e
+  Claude usam as configurações locais das respectivas ferramentas.
 
 ## Roadmap
 
@@ -341,10 +363,10 @@ Aplicação e CLI usam gatilhos independentes para evitar releases acidentais:
   aplicação em `chess.filipenos.com`.
 - Uma GitHub Release com tag igual à versão da CLI, por exemplo `v0.2.1`, executa
   novamente as verificações e publica essa versão no npm.
-- Depois de o workflow `publish-npm.yml` entrar na `main` e ser cadastrado como
-  Trusted Publisher no npm, as próximas releases usarão OIDC sem token permanente
-  no GitHub e receberão provenance automaticamente. A versão inicial `0.2.0` foi a
-  publicação manual usada para registrar o nome do pacote.
+- O workflow `publish-npm.yml` está cadastrado como Trusted Publisher no npm. As
+  releases usam OIDC sem token permanente no GitHub e recebem provenance
+  automaticamente. A versão inicial `0.2.0` foi a publicação manual usada para
+  registrar o nome do pacote.
 
 Antes de criar uma GitHub Release, atualize a versão de
 `apps/player-cli/package.json` e o `CHANGELOG.md`. Não reutilize uma tag ou versão já
@@ -366,7 +388,7 @@ npm audit
 apps/server       API HTTP e WebSocket
 apps/cloudflare   Worker, Durable Object, D1 e configuração Wrangler
 apps/web          Interface React/Vite
-apps/player-cli   CLI: Random, Ollama, Codex, Claude e OpenRouter
+apps/player-cli   CLI: Random, Ollama, LM Studio, Codex, Claude e OpenRouter
 packages/core     Contratos genéricos para jogos por turno
 packages/chess    Regras de xadrez encapsuladas com chess.js
 packages/protocol Tipos e validação Zod

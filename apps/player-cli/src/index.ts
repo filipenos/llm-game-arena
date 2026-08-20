@@ -10,6 +10,7 @@ import {
 import {
   createClaudePlayer,
   createCodexPlayer,
+  createLmStudioPlayer,
   createOllamaPlayer,
   createOpenRouterPlayer,
   randomMove,
@@ -18,31 +19,36 @@ import {
 import { ResumeStore, type ResumeIdentity } from "./resume-store.js"
 import { formatGameFinished, formatTokenUsage } from "./messages.js"
 
+type PlayerMode = "random" | "ollama" | "codex" | "claude" | "openrouter" | "lmstudio"
+
 interface CliOptions {
-  mode: "random" | "ollama" | "codex" | "claude" | "openrouter"
+  mode: PlayerMode
   sessionId: string
   server: string
   name: string
   color?: Color
   model?: string
   ollamaUrl: string
+  lmStudioUrl: string
   timeout: number
   language: AgentLanguage
 }
 
 const PRODUCTION_SERVER = "wss://chess.filipenos.com"
 const LOCAL_SERVER = "ws://localhost:6464"
-const USAGE = `Usage: llm-game-arena <random|ollama|codex|claude|openrouter> <SESSION_ID> [options]
+const PLAYER_MODES: PlayerMode[] = ["random", "ollama", "codex", "claude", "openrouter", "lmstudio"]
+const USAGE = `Usage: llm-game-arena <random|ollama|codex|claude|openrouter|lmstudio> <SESSION_ID> [options]
 
 Options:
   --server URL          Arena WebSocket URL (default: ${PRODUCTION_SERVER})
   --local               Use ${LOCAL_SERVER}
   --name NAME           Player name
   --seat white|black    Request a color; omitted means automatic
-  --model MODEL         Model name (required for OpenRouter)
+  --model MODEL         Model name (required for OpenRouter and LM Studio)
   --language pt|en      Public output language (default: pt)
   --timeout MS          Maximum time for each model attempt
   --ollama-url URL      Ollama API URL (default: http://localhost:11434)
+  --lmstudio-url URL    LM Studio API URL (default: http://localhost:1234)
   --help                 Show this help
 `
 
@@ -56,7 +62,7 @@ function option(args: string[], name: string): string | undefined {
 
 function parseArgs(args: string[]): CliOptions {
   const [mode, sessionId] = args
-  if (!mode || !["random", "ollama", "codex", "claude", "openrouter"].includes(mode) || !sessionId) {
+  if (!mode || !PLAYER_MODES.includes(mode as PlayerMode) || !sessionId) {
     throw new Error(
       USAGE
     )
@@ -72,25 +78,31 @@ function parseArgs(args: string[]): CliOptions {
   }
   const timeout = Number(
     option(args, "--timeout")
-      ?? (mode === "codex" || mode === "claude" || mode === "openrouter" ? 50_000 : 45_000)
+      ?? (mode === "codex" || mode === "claude" || mode === "openrouter" || mode === "lmstudio"
+        ? 50_000 : 45_000)
   )
   if (!Number.isFinite(timeout) || timeout < 1_000) {
     throw new Error("--timeout must be at least 1000 milliseconds")
   }
   const model = option(args, "--model")
-  if (mode === "openrouter" && !model) throw new Error("openrouter requires --model")
+  if ((mode === "openrouter" || mode === "lmstudio") && !model) {
+    throw new Error(`${mode} requires --model`)
+  }
   const language = option(args, "--language") ?? "pt"
   if (language !== "pt" && language !== "en") {
     throw new Error("--language must be pt or en")
   }
   return {
-    mode: mode as CliOptions["mode"],
+    mode: mode as PlayerMode,
     sessionId: parsedSessionId.data,
     server: args.includes("--local") ? LOCAL_SERVER : option(args, "--server") ?? PRODUCTION_SERVER,
-    name: option(args, "--name") ?? `${mode[0]?.toUpperCase()}${mode.slice(1)} Player`,
+    name: option(args, "--name") ?? (mode === "lmstudio"
+      ? "LM Studio Player"
+      : `${mode[0]?.toUpperCase()}${mode.slice(1)} Player`),
     ...(seat ? { color: seat as Color } : {}),
     ...(model ? { model } : {}),
     ollamaUrl: option(args, "--ollama-url") ?? "http://localhost:11434",
+    lmStudioUrl: option(args, "--lmstudio-url") ?? "http://localhost:1234",
     timeout,
     language
   }
@@ -183,10 +195,12 @@ async function main(): Promise<void> {
     name: options.name
   })
   const agent: AgentMetadata = {
-    player: options.mode === "openrouter" ? "openai-compatible" : options.mode,
+    player: options.mode === "openrouter" || options.mode === "lmstudio"
+      ? "openai-compatible" : options.mode,
     provider: options.mode === "codex" ? "openai"
       : options.mode === "claude" ? "anthropic"
         : options.mode === "openrouter" ? "openrouter"
+          : options.mode === "lmstudio" ? "lmstudio"
         : options.mode === "random" ? "local" : options.mode,
     ...(options.model ? { model: options.model }
       : options.mode === "ollama" ? { model: "qwen3:8b" }
@@ -248,10 +262,14 @@ async function main(): Promise<void> {
     : options.mode === "ollama" ? createOllamaPlayer(agentOptions)
       : options.mode === "codex" ? createCodexPlayer(agentOptions)
         : options.mode === "claude" ? createClaudePlayer(agentOptions)
-          : createOpenRouterPlayer({
+          : options.mode === "openrouter" ? createOpenRouterPlayer({
               ...agentOptions,
               openRouterApiKey: process.env.OPENROUTER_API_KEY
             })
+            : createLmStudioPlayer({
+                ...agentOptions,
+                lmStudioApiToken: process.env.LM_API_TOKEN
+              })
   player.onTurn(handler)
 
   process.once("SIGINT", () => {

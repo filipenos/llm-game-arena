@@ -17,7 +17,7 @@ O MVP suporta:
 - Início manual pelo controlador da sessão.
 - Tabuleiro, histórico, estado dos participantes e resultado em tempo real.
 - Todas as regras e condições de término fornecidas pelo `chess.js`.
-- Random, Ollama, Codex, Claude e OpenRouter Players com memória estratégica curta.
+- Random, Ollama, LM Studio, Codex, Claude e OpenRouter Players com memória estratégica curta.
 - Sessões locais em memória e sessões de produção persistidas em Durable Objects,
   com índice histórico no D1.
 - Timeout de 2 minutos por turno e empate após 300 jogadas individuais.
@@ -33,7 +33,7 @@ Persistência, deploy, ranking e MCP foram adicionados depois da primeira versã
 - `apps/web`: React e Vite.
 - `apps/cloudflare`: Worker, Durable Objects, alarmes e índice D1 da produção.
 - `apps/mcp-server`: bridge MCP `stdio` para a API e o WebSocket.
-- `apps/player-cli`: CLI para Random, Ollama, Codex, Claude e OpenRouter.
+- `apps/player-cli`: CLI para Random, Ollama, LM Studio, Codex, Claude e OpenRouter.
 - `packages/core`: contratos genéricos para jogos por turno.
 - `packages/chess`: implementação de xadrez e wrapper exclusivo do `chess.js`.
 - `packages/protocol`: tipos e schemas Zod usados em runtime.
@@ -306,7 +306,7 @@ await player.connect()
 ```
 
 O SDK envia `player.ready`, publica atividade e mantém o contexto do turno. O Random
-Player escolhe uma jogada legal. Os players Ollama, Codex, Claude e OpenRouter:
+Player escolhe uma jogada legal. Os players Ollama, LM Studio, Codex, Claude e OpenRouter:
 
 - Usa saída JSON e valida a resposta.
 - Aceita somente uma jogada presente em `legalMoves`.
@@ -384,7 +384,7 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
 5. Teste headless Random vs Random.
 6. Interface como espectadora.
 7. Interação humana e promoção.
-8. Ollama, Codex e Claude Players com validação, timeout e fallback.
+8. Ollama, LM Studio, Codex, Claude e OpenRouter Players com validação, timeout e fallback.
 9. Memória estratégica e estados de atividade.
 
 ## 14. Próximas fases fora do MVP
@@ -404,8 +404,9 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
 5. Adicionar um player para provedores com API compatível com OpenAI, incluindo
    OpenRouter, e aceitar modelos Nemotron e outras famílias oferecidas pelo provedor.
    Persistir separadamente o provedor, o tipo de player e o identificador exato do
-   modelo usado em cada partida. Implementado após o MVP para OpenRouter, com chave
-   somente via ambiente, modelo obrigatório e saída estruturada.
+   modelo usado em cada partida. Implementado após o MVP para OpenRouter e LM Studio,
+   com chaves somente via ambiente, modelo obrigatório e saída estruturada. O
+   OpenRouter recebe a URL e o título oficiais para atribuir o uso ao LLM Game Arena.
 6. Permitir retomada de players CLI depois de queda ou reinício do processo. O CLI
    deve persistir o `resumeToken` recebido fora do repositório, indexado por servidor
    e sessão, e reutilizá-lo automaticamente ao executar o mesmo comando. O servidor
@@ -444,7 +445,7 @@ O frontend nunca aplica uma jogada definitivamente antes da confirmação do ser
 15. Considerar contas de usuário, matchmaking e relógio de partida apenas como
     evolução de produto além das sessões compartilhadas por link.
 16. Adicionar `wait_for_turn` ao MCP para aguardar o turno sem polling.
-17. **Concluído:** implementar observabilidade para Random, Ollama, Codex, Claude e OpenRouter. A
+17. **Concluído:** implementar observabilidade para Random, Ollama, LM Studio, Codex, Claude e OpenRouter. A
     Player SDK deve emitir `player.progress` com fases públicas validadas e limitadas:
     turno recebido, análise, geração, validação, retry, fallback e decisão. Adaptadores
     devem aproveitar streaming e métricas quando disponíveis, mantendo um conjunto
@@ -469,5 +470,6 @@ O MVP está pronto quando:
 7. Espectadores acompanham snapshots, histórico, estados e resultado.
 8. Random vs Random e Humano vs Random funcionam ponta a ponta; os adapters Ollama,
    Codex e Claude funcionam quando suas respectivas ferramentas estão autenticadas;
-   OpenRouter funciona quando `OPENROUTER_API_KEY` e `--model` são informados.
+   OpenRouter funciona quando `OPENROUTER_API_KEY` e `--model` são informados; LM
+   Studio funciona com o servidor local ativo e `--model` informado.
 9. `npm test`, `npm run lint`, `npm run typecheck` e `npm run build` passam.

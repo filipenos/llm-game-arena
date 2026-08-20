@@ -27,10 +27,12 @@ export type AgentLanguage = "pt" | "en"
 export interface AgentOptions {
   model?: string
   ollamaUrl: string
+  lmStudioUrl: string
   timeout: number
   codexCommand?: string
   claudeCommand?: string
   openRouterApiKey?: string
+  lmStudioApiToken?: string
   language: AgentLanguage
   onReasoning?: (summary: string) => void
 }
@@ -327,33 +329,32 @@ export function createOllamaPlayer(options: AgentOptions) {
   }
 }
 
-interface OpenRouterCompletion {
+interface ChatCompletion {
   choices?: Array<{ message?: { content?: string; reasoning?: string } }>
   usage?: { prompt_tokens?: number; completion_tokens?: number }
 }
 
-export function createOpenRouterPlayer(
+interface ChatCompletionPlayerConfig {
+  name: string
+  url: string
+  headers: Record<string, string>
+  extraBody?: Record<string, unknown>
+}
+
+function createChatCompletionPlayer(
   options: AgentOptions,
-  request: typeof fetch = fetch
+  config: ChatCompletionPlayerConfig,
+  request: typeof fetch
 ) {
-  if (!options.model) throw new Error("OpenRouter requires --model")
-  if (!options.openRouterApiKey) {
-    throw new Error("OPENROUTER_API_KEY is required for OpenRouter")
-  }
   let memory = ""
   return async (context: TurnContext, reporter?: TurnReporter): Promise<PlayerDecision> => {
     let correction = ""
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         reporter?.progress("generating", { attempt: attempt + 1 })
-        const response = await request("https://openrouter.ai/api/v1/chat/completions", {
+        const response = await request(config.url, {
           method: "POST",
-          headers: {
-            authorization: `Bearer ${options.openRouterApiKey}`,
-            "content-type": "application/json",
-            "http-referer": "https://chess.filipenos.com",
-            "x-openrouter-title": "LLM Game Arena"
-          },
+          headers: config.headers,
           body: JSON.stringify({
             model: options.model,
             messages: [{
@@ -369,12 +370,12 @@ export function createOpenRouterPlayer(
                 schema: decisionSchema
               }
             },
-            provider: { require_parameters: true }
+            ...config.extraBody
           }),
           signal: AbortSignal.timeout(options.timeout)
         })
-        if (!response.ok) throw new Error(`OpenRouter returned HTTP ${response.status}`)
-        const payload = await response.json() as OpenRouterCompletion
+        if (!response.ok) throw new Error(`${config.name} returned HTTP ${response.status}`)
+        const payload = await response.json() as ChatCompletion
         const reasoningEmitted = emitReasoning(
           options,
           payload.choices?.[0]?.message?.reasoning
@@ -392,14 +393,66 @@ export function createOpenRouterPlayer(
         memory = decision.memory
         return publicDecision(decision, move)
       } catch (error) {
-        correction = error instanceof Error ? error.message : "Invalid OpenRouter response"
+        correction = error instanceof Error ? error.message : `Invalid ${config.name} response`
         if (attempt === 0) reporter?.progress("retrying", { attempt: 2 })
       }
     }
-    logFallback("OpenRouter", options.language)
+    logFallback(config.name, options.language)
     reporter?.progress("fallback", { attempt: 2 })
     return randomMove(context, options.language)
   }
+}
+
+function httpBaseUrl(value: string, name: string): string {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error(`${name} URL must be a valid HTTP URL`)
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`${name} URL must use HTTP or HTTPS`)
+  }
+  return url.toString().replace(/\/$/, "")
+}
+
+export function createOpenRouterPlayer(
+  options: AgentOptions,
+  request: typeof fetch = fetch
+) {
+  if (!options.model) throw new Error("OpenRouter requires --model")
+  if (!options.openRouterApiKey) {
+    throw new Error("OPENROUTER_API_KEY is required for OpenRouter")
+  }
+  return createChatCompletionPlayer(options, {
+    name: "OpenRouter",
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    headers: {
+      authorization: `Bearer ${options.openRouterApiKey}`,
+      "content-type": "application/json",
+      "http-referer": "https://chess.filipenos.com",
+      "x-openrouter-title": "LLM Game Arena"
+    },
+    extraBody: { provider: { require_parameters: true } }
+  }, request)
+}
+
+export function createLmStudioPlayer(
+  options: AgentOptions,
+  request: typeof fetch = fetch
+) {
+  if (!options.model) throw new Error("LM Studio requires --model")
+  const baseUrl = httpBaseUrl(options.lmStudioUrl, "LM Studio")
+  return createChatCompletionPlayer(options, {
+    name: "LM Studio",
+    url: `${baseUrl}/v1/chat/completions`,
+    headers: {
+      "content-type": "application/json",
+      ...(options.lmStudioApiToken
+        ? { authorization: `Bearer ${options.lmStudioApiToken}` }
+        : {})
+    }
+  }, request)
 }
 
 export function createCodexPlayer(options: AgentOptions, runner: CommandRunner = runCommand) {
