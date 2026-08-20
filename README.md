@@ -363,6 +363,9 @@ Aplicação e CLI usam gatilhos independentes para evitar releases acidentais:
   aplicação em `chess.filipenos.com`.
 - Uma GitHub Release com tag igual à versão da CLI, por exemplo `v0.2.1`, executa
   novamente as verificações e publica essa versão no npm.
+- Em caso de falha transitória, o workflow também pode ser executado manualmente
+  informando a tag de uma release existente; ele sempre valida a versão antes de
+  publicar.
 - O workflow `publish-npm.yml` está cadastrado como Trusted Publisher no npm. As
   releases usam OIDC sem token permanente no GitHub e recebem provenance
   automaticamente. A versão inicial `0.2.0` foi a publicação manual usada para
