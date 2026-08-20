@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   createClaudePlayer,
   createCodexPlayer,
+  createLmStudioPlayer,
   createOpenRouterPlayer,
   parseDecisionOutput,
   reasoningSummaryFromEvent,
@@ -23,6 +24,7 @@ const context: TurnContext = {
 const options: AgentOptions = {
   model: "test-model",
   ollamaUrl: "http://localhost:11434",
+  lmStudioUrl: "http://localhost:1234",
   timeout: 10_000,
   language: "pt"
 }
@@ -189,6 +191,12 @@ describe("CLI agents", () => {
     expect(new Headers(requestOptions?.headers).get("authorization")).toBe(
       "Bearer test-openrouter-key"
     )
+    expect(new Headers(requestOptions?.headers).get("http-referer")).toBe(
+      "https://chess.filipenos.com"
+    )
+    expect(new Headers(requestOptions?.headers).get("x-openrouter-title")).toBe(
+      "LLM Game Arena"
+    )
     const body = JSON.parse(String(requestOptions?.body)) as Record<string, unknown>
     expect(body).toMatchObject({
       model: "nvidia/nemotron-3-super-120b-a12b:free",
@@ -204,5 +212,47 @@ describe("CLI agents", () => {
     expect(() => createOpenRouterPlayer({ ...options, model: "nvidia/test" })).toThrow(
       "OPENROUTER_API_KEY is required"
     )
+  })
+
+  it("uses LM Studio structured output through its local OpenAI-compatible API", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: '{"move":"d2d4","memory":"Center","commentary":"Ocupo o centro."}' } }],
+      usage: { prompt_tokens: 80, completion_tokens: 16 }
+    }), { status: 200, headers: { "content-type": "application/json" } }))
+    const chooseMove = createLmStudioPlayer({
+      ...options,
+      model: "openai/gpt-oss-20b",
+      lmStudioUrl: "http://localhost:1234/",
+      lmStudioApiToken: "local-test-token"
+    }, request)
+
+    const progress = vi.fn()
+    await expect(chooseMove(context, { progress })).resolves.toEqual({
+      move: { from: "d2", to: "d4" }, commentary: "Ocupo o centro."
+    })
+    expect(progress).toHaveBeenCalledWith("validating", {
+      attempt: 1, inputTokens: 80, outputTokens: 16
+    })
+    const [url, requestOptions] = request.mock.calls[0] ?? []
+    expect(url).toBe("http://localhost:1234/v1/chat/completions")
+    expect(new Headers(requestOptions?.headers).get("authorization")).toBe(
+      "Bearer local-test-token"
+    )
+    const body = JSON.parse(String(requestOptions?.body)) as Record<string, unknown>
+    expect(body).toMatchObject({
+      model: "openai/gpt-oss-20b",
+      response_format: { type: "json_schema" }
+    })
+    expect(body).not.toHaveProperty("provider")
+  })
+
+  it("validates the LM Studio model and server URL", () => {
+    expect(() => createLmStudioPlayer({ ...options, model: undefined })).toThrow(
+      "LM Studio requires --model"
+    )
+    expect(() => createLmStudioPlayer({
+      ...options,
+      lmStudioUrl: "file:///tmp/lmstudio"
+    })).toThrow("LM Studio URL must use HTTP or HTTPS")
   })
 })

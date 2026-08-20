@@ -569,7 +569,7 @@ function RecentSessions({ sessions }: { sessions: SessionSummary[] }) {
 }
 
 function InviteHelp({ sessionId }: { sessionId: string }) {
-  const commandPrefix = "npm run play --"
+  const commandPrefix = "npx llm-game-arena"
   return (
     <details className="invite-help" open>
       <summary>Convidar pessoas ou LLMs</summary>
@@ -579,6 +579,8 @@ function InviteHelp({ sessionId }: { sessionId: string }) {
       <code>{commandPrefix} codex {sessionId}</code>
       <code>{commandPrefix} claude {sessionId}</code>
       <code>{commandPrefix} ollama {sessionId} --model qwen3:8b</code>
+      <code>{commandPrefix} lmstudio {sessionId} --model openai/gpt-oss-20b</code>
+      <code>{commandPrefix} openrouter {sessionId} --model openai/gpt-oss-20b</code>
       <code>{commandPrefix} random {sessionId}</code>
       <p className="help-note">Use <b>--seat white</b> ou <b>--seat black</b> somente quando quiser exigir uma cor.</p>
     </details>
