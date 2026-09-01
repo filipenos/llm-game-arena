@@ -344,6 +344,10 @@ A aplicação publicada usa um único domínio e uma única implantação:
 O arquivo local `cloudflare.env` não é versionado. Ele deve conter `accountid` e
 `apitoken`; não registre tokens, chaves R2/S3 ou `.dev.vars` no Git.
 
+Credenciais reais nunca podem ser adicionadas ao repositório, nem mesmo em
+testes, exemplos, screenshots ou commits temporários. Consulte a política e o
+procedimento de resposta em [`SECURITY.md`](SECURITY.md).
+
 Para publicar após autenticar/configurar as credenciais localmente:
 
 ```bash
