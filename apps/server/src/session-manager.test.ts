@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { ChessGame } from "@llm-chess/chess"
 import { DomainError } from "./domain.js"
 import { SessionManager } from "./session-manager.js"
 
@@ -152,7 +153,8 @@ describe("SessionManager", () => {
     manager.markReady(session, white)
     manager.markReady(session, black)
     manager.startGame(session.id, session.controllerToken)
-    session.game?.submitAction("white", { from: "e2", to: "e4" })
+    if (!(session.game instanceof ChessGame)) throw new Error("Expected chess game")
+    session.game.submitAction("white", { from: "e2", to: "e4" })
     manager.addMoveCommentary(session, 1, "Ocupo o centro.")
     manager.addProgress(session, {
       participantId: white.id,
@@ -172,10 +174,12 @@ describe("SessionManager", () => {
 
     expect(restored.game?.getActionCount()).toBe(1)
     expect(restored.turnDeadlineAt).toBe(123_456)
-    expect(restored.game?.getPublicState().fen).toBe(session.game?.getPublicState().fen)
+    if (!(restored.game instanceof ChessGame)) throw new Error("Expected restored chess game")
+    expect(restored.game.getPublicState().fen).toBe(session.game.getPublicState().fen)
     expect(restored.white?.connected).toBe(false)
     expect(restored.black?.connected).toBe(false)
-    expect(restoredManager.snapshot(restored).game?.moves[0]?.uci).toBe("e2e4")
+    const restoredSnapshotGame = restoredManager.snapshot(restored).game
+    expect(restoredSnapshotGame?.gameType === "chess" && restoredSnapshotGame.moves[0]?.uci).toBe("e2e4")
     expect(restoredManager.snapshot(restored).game?.moves[0]?.commentary).toBe("Ocupo o centro.")
     expect(restoredManager.snapshot(restored).game?.progress).toHaveLength(1)
     expect(restoredManager.snapshot(restored).session.white?.tokenUsage).toEqual({
@@ -202,8 +206,11 @@ describe("SessionManager", () => {
     session.game?.finish({ reason: "turn-timeout", winner: "black" })
     session.status = "finished"
 
-    const restored = new SessionManager().restore(manager.persistable(session))
+    const persisted = manager.persistable(session)
+    delete persisted.results
+    const restored = new SessionManager().restore(persisted)
 
     expect(restored.game?.getOutcome()).toEqual({ reason: "turn-timeout", winner: "black" })
+    expect(restored.results).toEqual([{ reason: "turn-timeout", winner: "black" }])
   })
 })

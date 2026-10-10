@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 export const colorSchema = z.enum(["white", "black"])
+export const gameTypeSchema = z.enum(["chess", "tic-tac-toe"])
 export const participantTypeSchema = z.enum(["human", "agent", "engine"])
 export const sessionStatusSchema = z.enum(["waiting", "ready", "playing", "finished"])
 export const activitySchema = z.enum(["idle", "thinking", "decided"])
@@ -32,6 +33,7 @@ export const agentMetadataSchema = z.object({
 })
 
 export type Color = z.infer<typeof colorSchema>
+export type GameType = z.infer<typeof gameTypeSchema>
 export type ParticipantType = z.infer<typeof participantTypeSchema>
 export type SessionStatus = z.infer<typeof sessionStatusSchema>
 export type PlayerActivity = z.infer<typeof activitySchema>
@@ -57,6 +59,12 @@ export interface ChessMove extends MoveCommand {
   captured?: string
   before: string
   after: string
+  commentary?: string
+}
+
+export interface TicTacToeMove {
+  cell: number
+  color: Color
   commentary?: string
 }
 
@@ -92,6 +100,7 @@ export type GameFinishReason =
   | "resignation"
   | "turn-timeout"
   | "move-limit"
+  | "three-in-a-row"
 
 export interface GameResult {
   reason: GameFinishReason
@@ -111,26 +120,39 @@ export interface PublicParticipant {
   tokenUsage?: TokenUsage
 }
 
-export interface PublicGame {
+interface PublicGameBase {
   id: string
-  fen: string
   turn: Color
   ply: number
-  moves: ChessMove[]
   status: "playing" | "finished"
   turnDeadlineAt?: number
   result?: GameResult
   progress: PlayerProgress[]
 }
 
+export interface PublicChessGame extends PublicGameBase {
+  gameType: "chess"
+  fen: string
+  moves: ChessMove[]
+}
+
+export interface PublicTicTacToeGame extends PublicGameBase {
+  gameType: "tic-tac-toe"
+  board: Array<Color | null>
+  moves: TicTacToeMove[]
+}
+
+export type PublicGame = PublicChessGame | PublicTicTacToeGame
+
 export interface SessionSnapshot {
   revision: number
   session: {
     id: string
-    gameType: string
+    gameType: GameType
     status: SessionStatus
     white: PublicParticipant | null
     black: PublicParticipant | null
+    results: GameResult[]
   }
   game?: PublicGame
 }
@@ -230,6 +252,13 @@ export const clientEventSchema = z.union([
     promotion: promotionSchema.optional(),
     commentary: singleLineTextSchema.optional()
   }).strict(),
+  z.object({
+    type: z.literal("tic-tac-toe.play"),
+    requestId: requestIdSchema,
+    expectedPly: z.number().int().nonnegative(),
+    cell: z.number().int().min(0).max(8),
+    commentary: singleLineTextSchema.optional()
+  }).strict(),
   z.object({ type: z.literal("game.resign") })
 ])
 
@@ -266,6 +295,9 @@ export type ServerEvent =
     }
   | ({ type: "session.snapshot" } & SessionSnapshot)
   | { type: "game.started"; gameId: string; fen: string; turn: Color }
+  | { type: "tic-tac-toe.started"; gameId: string; board: Array<Color | null>; turn: Color }
+  | { type: "tic-tac-toe.turn.started"; gameId: string; board: Array<Color | null>; color: Color; ply: number; legalCells: number[] }
+  | { type: "tic-tac-toe.move.made"; requestId: string; participantId: string; move: TicTacToeMove; board: Array<Color | null>; turn: Color; ply: number }
   | {
       type: "turn.started"
       gameId: string

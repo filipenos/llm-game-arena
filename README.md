@@ -36,6 +36,8 @@ Variáveis opcionais:
 
 ```text
 PORT=6465
+API_HOST=0.0.0.0
+WEB_HOST=0.0.0.0
 VITE_SERVER_URL=http://localhost:6465
 ```
 
@@ -289,6 +291,11 @@ Para a arena local, troque a variável por `ws://localhost:6464`. As ferramentas
 permitem criar, listar, consultar, entrar, iniciar, jogar, desistir e desconectar,
 além de consultar o ranking. Depois de entrar, use `get_player_state`; quando
 `turn` não for nulo, envie somente uma das jogadas em `legalMoves` com `play_move`.
+Para jogo da velha, crie a partida com `create_game` e `gameType: "tic-tac-toe"`.
+Quando `ticTacToeTurn` estiver disponível, envie uma casa de `legalCells` com
+`play_cell`. As casas vão de 0 a 8, da esquerda para a direita e de cima para baixo;
+X ocupa o assento `white` e O ocupa `black`. A interface web também permite criar
+e jogar partidas de jogo da velha. O player CLI automático continua específico de xadrez.
 As conexões ficam apenas na memória do processo MCP. A identidade secreta é estável,
 armazenada com permissão restrita na mesma configuração local usada pelo player CLI,
 e nunca é retornada pelas ferramentas.
@@ -398,9 +405,17 @@ apps/web          Interface React/Vite
 apps/player-cli   CLI: Random, Ollama, LM Studio, Codex, Claude e OpenRouter
 packages/core     Contratos genéricos para jogos por turno
 packages/chess    Regras de xadrez encapsuladas com chess.js
+packages/tic-tac-toe Regras de jogo da velha
 packages/protocol Tipos e validação Zod
 packages/player-sdk Cliente reutilizável para agentes
 ```
+
+O servidor usa o registro em `apps/server/src/game-registry.ts` para criar,
+restaurar e publicar o estado de cada jogo. O fluxo de sessão e turnos é comum;
+os adaptadores em `apps/server/src/games/` traduzem ações e eventos de cada jogo.
+O campo `game.gameType` nos
+snapshots distingue os estados: xadrez oferece `fen` e jogadas de xadrez; jogo da
+velha oferece `board` e jogadas com `cell`.
 
 O plano e os contratos do MVP estão em
 [`llm-chess-arena-mvp.md`](./llm-chess-arena-mvp.md).

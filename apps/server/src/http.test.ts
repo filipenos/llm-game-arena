@@ -27,6 +27,24 @@ async function startHttpServer(arena: ArenaService): Promise<string> {
 }
 
 describe("HTTP API", () => {
+  it("creates tic-tac-toe sessions and rejects unknown game types", async () => {
+    const arena = new ArenaService()
+    const baseUrl = await startHttpServer(arena)
+    const createdResponse = await fetch(`${baseUrl}/api/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ gameType: "tic-tac-toe" })
+    })
+    expect(createdResponse.status).toBe(201)
+    const created = await createdResponse.json() as { sessionId: string }
+    expect(arena.sessions.getSession(created.sessionId).gameType).toBe("tic-tac-toe")
+    const invalidResponse = await fetch(`${baseUrl}/api/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ gameType: "unknown" })
+    })
+    expect(invalidResponse.status).toBe(400)
+  })
   it("creates, reads and starts an authorized ready session", async () => {
     const arena = new ArenaService()
     const baseUrl = await startHttpServer(arena)

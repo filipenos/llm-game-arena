@@ -1,6 +1,6 @@
-import { moveToUci } from "@llm-chess/chess"
 import { oppositeColor, type ClientEvent, type Color, type GameResult, type ServerEvent } from "@llm-chess/protocol"
 import { DomainError } from "./domain.js"
+import { gameRegistry, isGameAction, type GameActionEvent } from "./game-registry.js"
 import {
   SessionManager,
   type ParticipantRecord,
@@ -101,10 +101,10 @@ export class ArenaService {
         if (event.type === "player.ready") this.handleReady(connectionId)
         else if (event.type === "player.status") this.handleStatus(connectionId, event.status)
         else if (event.type === "player.progress") this.handleProgress(connectionId, event)
-        else if (event.type === "move.play") this.handleMove(connectionId, event)
+        else if (isGameAction(event)) this.handleGameAction(connectionId, event)
         else if (event.type === "game.resign") this.handleResign(connectionId)
       } catch (error) {
-        this.sendError(connectionId, error, event.type === "move.play" ? event.requestId : undefined)
+        this.sendError(connectionId, error, isGameAction(event) ? event.requestId : undefined)
       }
     })
   }
@@ -119,12 +119,7 @@ export class ArenaService {
 
     this.beginTurn(session)
 
-    this.broadcast(session, {
-      type: "game.started",
-      gameId: game.id,
-      fen: game.getPublicState().fen,
-      turn: game.getCurrentSeat()
-    })
+    this.broadcast(session, gameRegistry[session.gameType].started(game))
     this.broadcastSnapshot(session)
     this.notifyTurn(session)
     return session
@@ -298,14 +293,15 @@ export class ArenaService {
     this.broadcast(session, { type: "player.progress", progress })
   }
 
-  private handleMove(
-    connectionId: string,
-    event: Extract<ClientEvent, { type: "move.play" }>
-  ): void {
+  private handleGameAction(connectionId: string, event: GameActionEvent): void {
     const { session, participant } = this.requirePlayer(connectionId)
     const game = session.game
     if (session.status !== "playing" || !game) {
       throw new DomainError("GAME_NOT_PLAYING", "The game is not running")
+    }
+    const adapter = gameRegistry[session.gameType]
+    if (event.type !== adapter.actionType) {
+      throw new DomainError("INVALID_MESSAGE", `Use ${adapter.actionType} for this game`)
     }
     if (session.processedRequestIds.has(event.requestId)) {
       throw new DomainError("DUPLICATE_REQUEST", "Request has already been processed")
@@ -317,17 +313,13 @@ export class ArenaService {
       throw new DomainError("NOT_YOUR_TURN", "It is not this player's turn")
     }
 
-    const result = game.submitAction(participant.color, {
-      from: event.from,
-      to: event.to,
-      ...(event.promotion ? { promotion: event.promotion } : {})
-    })
+    const result = adapter.play(game, participant.color, event, participant.id)
     if (!result.valid) {
       this.send(connectionId, {
         type: "move.invalid",
         requestId: event.requestId,
         code: "ILLEGAL_MOVE",
-        message: "Illegal move"
+        message: result.message
       })
       return
     }
@@ -337,18 +329,7 @@ export class ArenaService {
     if (event.commentary) this.sessions.addMoveCommentary(session, ply, event.commentary)
     participant.activity = "idle"
     this.sessions.touch(session)
-    const move = event.commentary
-      ? { ...result.action, commentary: event.commentary }
-      : result.action
-    this.broadcast(session, {
-      type: "move.made",
-      requestId: event.requestId,
-      participantId: participant.id,
-      move,
-      fen: game.getPublicState().fen,
-      turn: game.getCurrentSeat(),
-      ply: game.getActionCount()
-    })
+    this.broadcast(session, result.event)
 
     const gameResult = game.getOutcome()
     if (gameResult) {
@@ -384,6 +365,7 @@ export class ArenaService {
 
   private finishGame(session: SessionRecord, result: GameResult): void {
     session.status = "finished"
+    session.results.push({ ...result })
     delete session.turnDeadlineAt
     this.cancelTurnTimer(session.id)
     this.sessions.touch(session)
@@ -412,17 +394,7 @@ export class ArenaService {
     const game = session.game
     const participant = this.sessions.participantForTurn(session)
     if (!game || !participant?.connectionId || session.status !== "playing") return
-    const history = game.getHistory()
-    const state = game.getPlayerState(participant.color)
-    this.send(participant.connectionId, {
-      type: "turn.started",
-      gameId: game.id,
-      fen: state.fen,
-      color: game.getCurrentSeat(),
-      ply: game.getActionCount(),
-      ...(history.at(-1) ? { lastMove: history.at(-1) } : {}),
-      legalMoves: game.getLegalActions(participant.color).map(moveToUci)
-    })
+    this.send(participant.connectionId, gameRegistry[session.gameType].turn(game, participant.color))
   }
 
   private requirePlayer(

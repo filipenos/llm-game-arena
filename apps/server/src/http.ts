@@ -1,6 +1,6 @@
 import cors from "cors"
 import express, { type ErrorRequestHandler } from "express"
-import { leaderboardGroupSchema, sessionIdSchema } from "@llm-chess/protocol"
+import { gameTypeSchema, leaderboardGroupSchema, sessionIdSchema } from "@llm-chess/protocol"
 import type { ArenaService } from "./arena-service.js"
 import { DomainError } from "./domain.js"
 import { calculateLeaderboard, type RankedMatch } from "./leaderboard.js"
@@ -32,8 +32,9 @@ export function createHttpApp(arena: ArenaService) {
     response.json({ status: "ok" })
   })
 
-  app.post("/api/sessions", (_request, response) => {
-    const session = arena.sessions.createSession()
+  app.post("/api/sessions", (request, response) => {
+    const gameType = gameTypeSchema.parse(request.body?.gameType ?? "chess")
+    const session = arena.sessions.createSession(undefined, gameType)
     response.status(201).json({
       sessionId: session.id,
       controllerToken: session.controllerToken

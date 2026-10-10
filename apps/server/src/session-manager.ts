@@ -1,13 +1,9 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto"
-import {
-  chessGameDefinition,
-  type ChessGameContract
-} from "@llm-chess/chess"
 import type {
   Color,
   AgentMetadata,
   GameResult,
-  MoveCommand,
+  GameType,
   ParticipantType,
   PlayerActivity,
   PlayerProgress,
@@ -16,6 +12,7 @@ import type {
   TokenUsage
 } from "@llm-chess/protocol"
 import { DomainError } from "./domain.js"
+import { gameRegistry, type ArenaGame } from "./game-registry.js"
 
 const SESSION_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
@@ -36,16 +33,17 @@ export interface ParticipantRecord {
 
 export interface SessionRecord {
   id: string
-  gameType: string
+  gameType: GameType
   revision: number
   status: SessionStatus
   controllerToken: string
   white?: ParticipantRecord
   black?: ParticipantRecord
   spectators: Set<string>
-  game?: ChessGameContract
+  game?: ArenaGame
   turnDeadlineAt?: number
   processedRequestIds: Set<string>
+  results: GameResult[]
   progress: PlayerProgress[]
   moveCommentaries: Map<number, string>
 }
@@ -65,7 +63,7 @@ export interface PersistedParticipant {
 
 export interface PersistedSession {
   id: string
-  gameType: string
+  gameType: GameType
   revision: number
   status: SessionStatus
   controllerToken: string
@@ -73,11 +71,12 @@ export interface PersistedSession {
   black?: PersistedParticipant
   game?: {
     id: string
-    moves: MoveCommand[]
+    moves: unknown[]
     result?: GameResult
   }
   turnDeadlineAt?: number
   processedRequestIds: string[]
+  results?: GameResult[]
   progress?: PlayerProgress[]
   moveCommentaries?: Array<{ ply: number; commentary: string }>
 }
@@ -108,11 +107,7 @@ function agentIdentityId(identityToken: string): string {
 export class SessionManager {
   private readonly sessions = new Map<string, SessionRecord>()
 
-  constructor(
-    private readonly gameDefinition = chessGameDefinition
-  ) {}
-
-  createSession(requestedId?: string): SessionRecord {
+  createSession(requestedId?: string, gameType: GameType = "chess"): SessionRecord {
     let id = requestedId ?? this.makeSessionId()
     while (!requestedId && this.sessions.has(id)) id = this.makeSessionId()
     if (this.sessions.has(id)) {
@@ -121,12 +116,13 @@ export class SessionManager {
 
     const session: SessionRecord = {
       id,
-      gameType: this.gameDefinition.gameType,
+      gameType,
       revision: 0,
       status: "waiting",
       controllerToken: secureToken(),
       spectators: new Set(),
       processedRequestIds: new Set(),
+      results: [],
       progress: [],
       moveCommentaries: new Map()
     }
@@ -147,16 +143,13 @@ export class SessionManager {
       ...(session.game ? {
         game: {
           id: session.game.id,
-          moves: session.game.getHistory().map(move => ({
-            from: move.from,
-            to: move.to,
-            ...(move.promotion ? { promotion: move.promotion } : {})
-          })),
+          moves: gameRegistry[session.gameType].serialize(session.game),
           ...(result ? { result } : {})
         }
       } : {}),
       ...(session.turnDeadlineAt ? { turnDeadlineAt: session.turnDeadlineAt } : {}),
       processedRequestIds: [...session.processedRequestIds],
+      results: session.results.map(result => ({ ...result })),
       progress: session.progress,
       moveCommentaries: [...session.moveCommentaries].map(([ply, commentary]) => ({
         ply,
@@ -178,17 +171,17 @@ export class SessionManager {
       ...(persisted.turnDeadlineAt ? { turnDeadlineAt: persisted.turnDeadlineAt } : {}),
       spectators: new Set(),
       processedRequestIds: new Set(persisted.processedRequestIds),
+      results: persisted.results?.map(result => ({ ...result }))
+        ?? (persisted.status === "finished" && persisted.game?.result
+          ? [{ ...persisted.game.result }]
+          : []),
       progress: persisted.progress ?? [],
       moveCommentaries: new Map(
         (persisted.moveCommentaries ?? []).map(entry => [entry.ply, entry.commentary])
       )
     }
     if (persisted.game) {
-      session.game = this.gameDefinition.create(persisted.game.id)
-      for (const move of persisted.game.moves) {
-        const result = session.game.submitAction(session.game.getCurrentSeat(), move)
-        if (!result.valid) throw new Error(`Cannot restore invalid move in session ${session.id}`)
-      }
+      session.game = gameRegistry[persisted.gameType].restore(persisted.game.id, persisted.game.moves)
       if (persisted.game.result && !session.game.getOutcome()) {
         session.game.finish(persisted.game.result)
       }
@@ -323,11 +316,18 @@ export class SessionManager {
       throw new DomainError("UNAUTHORIZED", "Invalid controller token", 401)
     }
     if (session.status === "playing" && session.game) return session
-    if (session.status !== "ready") {
+    const playersReady = session.white?.connected && session.white.ready
+      && session.black?.connected && session.black.ready
+    if (!playersReady || (session.status !== "ready" && session.status !== "finished")) {
       throw new DomainError("SESSION_NOT_READY", "Both players must be connected and ready")
     }
-    session.game = this.gameDefinition.create(`g_${randomUUID()}`)
+    session.game = gameRegistry[session.gameType].create(`g_${randomUUID()}`)
     session.status = "playing"
+    session.processedRequestIds.clear()
+    session.progress = []
+    session.moveCommentaries.clear()
+    if (session.white) session.white.activity = "idle"
+    if (session.black) session.black.activity = "idle"
     this.touch(session)
     return session
   }
@@ -344,6 +344,7 @@ export class SessionManager {
   }
 
   snapshot(session: SessionRecord): SessionSnapshot {
+    const game = session.game
     return {
       revision: session.revision,
       session: {
@@ -351,28 +352,18 @@ export class SessionManager {
         gameType: session.gameType,
         status: session.status,
         white: session.white ? this.publicParticipant(session.white) : null,
-        black: session.black ? this.publicParticipant(session.black) : null
+        black: session.black ? this.publicParticipant(session.black) : null,
+        results: session.results.map(result => ({ ...result }))
       },
-      ...(session.game
+      ...(game
         ? {
-            game: {
-              id: session.game.id,
-              fen: session.game.getPublicState().fen,
-              turn: session.game.getCurrentSeat(),
-              ply: session.game.getActionCount(),
-              moves: session.game.getHistory().map((move, index) => ({
-                ...move,
-                ...(session.moveCommentaries.get(index + 1)
-                  ? { commentary: session.moveCommentaries.get(index + 1) }
-                  : {})
-              })),
-              status: session.status === "finished" ? "finished" as const : "playing" as const,
-              ...(session.status === "playing" && session.turnDeadlineAt
-                ? { turnDeadlineAt: session.turnDeadlineAt }
-                : {}),
-              ...(session.game.getOutcome() ? { result: session.game.getOutcome() } : {}),
-              progress: session.progress
-            }
+            game: gameRegistry[session.gameType].snapshot(
+              game,
+              session.status === "finished" ? "finished" : "playing",
+              session.progress,
+              session.moveCommentaries,
+              session.turnDeadlineAt
+            )
           }
         : {})
     }

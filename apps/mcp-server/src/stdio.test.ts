@@ -23,6 +23,7 @@ describe("LLM Game Arena MCP stdio server", () => {
         "get_player_state",
         "join_game",
         "list_games",
+        "play_cell",
         "play_move",
         "resign_game",
         "start_game"

@@ -1,12 +1,83 @@
 import type { ClientEvent, ServerEvent } from "@llm-chess/protocol"
 import { describe, expect, it } from "vitest"
 import { ArenaService } from "./arena-service.js"
+import { SessionManager } from "./session-manager.js"
 
 function eventSink(events: ServerEvent[]) {
   return { send: (event: ServerEvent) => events.push(event) }
 }
 
 describe("ArenaService", () => {
+  it("plays and restores a tic-tac-toe session", async () => {
+    const arena = new ArenaService(undefined, { manageTurnTimers: false })
+    const session = arena.sessions.createSession(undefined, "tic-tac-toe")
+    const whiteEvents: ServerEvent[] = []
+    const blackEvents: ServerEvent[] = []
+    arena.addConnection("white", eventSink(whiteEvents))
+    arena.addConnection("black", eventSink(blackEvents))
+    for (const color of ["white", "black"] as const) {
+      await arena.handleEvent(color, {
+        type: "connection.join", sessionId: session.id, role: "player",
+        name: color, participantType: "human", requestedColor: color
+      })
+      await arena.handleEvent(color, { type: "player.ready" })
+    }
+    arena.startSession(session.id, session.controllerToken)
+    expect(whiteEvents.some(event => event.type === "tic-tac-toe.turn.started")).toBe(true)
+    await arena.handleEvent("white", {
+      type: "tic-tac-toe.play", requestId: "first", expectedPly: 0, cell: 0
+    })
+    await arena.handleEvent("black", {
+      type: "tic-tac-toe.play", requestId: "occupied", expectedPly: 1, cell: 0
+    })
+    expect(blackEvents.at(-1)).toMatchObject({ type: "move.invalid", code: "ILLEGAL_MOVE" })
+    const snapshot = arena.sessions.snapshot(session).game
+    expect(snapshot?.gameType === "tic-tac-toe" && snapshot.board[0]).toBe("white")
+    expect(snapshot).not.toHaveProperty("fen")
+    const restoredManager = new SessionManager()
+    const restored = restoredManager.restore(arena.sessions.persistable(session))
+    const restoredGame = restoredManager.snapshot(restored).game
+    expect(restoredGame?.gameType === "tic-tac-toe" && restoredGame.moves).toEqual([{ cell: 0, color: "white" }])
+    for (const [connection, cell] of [["black", 3], ["white", 1], ["black", 4], ["white", 2]] as const) {
+      await arena.handleEvent(connection, {
+        type: "tic-tac-toe.play", requestId: `cell-${cell}`,
+        expectedPly: session.game?.getActionCount() ?? 0, cell
+      })
+    }
+    expect(session.status).toBe("finished")
+    expect(session.game?.getOutcome()).toEqual({ reason: "three-in-a-row", winner: "white" })
+    expect(arena.sessions.snapshot(session).session.results).toEqual([
+      { reason: "three-in-a-row", winner: "white" }
+    ])
+
+    const previousGameId = session.game?.id
+    arena.startSession(session.id, session.controllerToken)
+    const nextGame = arena.sessions.snapshot(session).game
+    expect(session.game?.id).not.toBe(previousGameId)
+    expect(nextGame?.gameType === "tic-tac-toe" && nextGame.board).toEqual(Array(9).fill(null))
+    expect(nextGame?.ply).toBe(0)
+    expect(nextGame?.status).toBe("playing")
+    expect(arena.sessions.snapshot(session).session.results).toHaveLength(1)
+    expect(blackEvents.at(-1)).toMatchObject({ type: "session.snapshot", game: { ply: 0 } })
+    await arena.handleEvent("white", {
+      type: "tic-tac-toe.play", requestId: "first", expectedPly: 0, cell: 4
+    })
+    expect(arena.sessions.snapshot(session).game).toMatchObject({
+      ply: 1,
+      board: [null, null, null, null, "white", null, null, null, null]
+    })
+    await arena.handleEvent("white", { type: "game.resign" })
+    expect(arena.sessions.snapshot(session).session.results).toEqual([
+      { reason: "three-in-a-row", winner: "white" },
+      { reason: "resignation", winner: "black" }
+    ])
+    const persisted = arena.sessions.persistable(session)
+    const reloaded = new SessionManager().restore(persisted)
+    expect(reloaded.results).toEqual([
+      { reason: "three-in-a-row", winner: "white" },
+      { reason: "resignation", winner: "black" }
+    ])
+  })
   it("awards the game when a player exceeds the turn deadline", async () => {
     let now = 1_000
     const arena = new ArenaService(undefined, {
@@ -156,7 +227,8 @@ describe("ArenaService", () => {
     const snapshot = spectatorEvents.findLast(
       (event): event is Extract<ServerEvent, { type: "session.snapshot" }> => event.type === "session.snapshot"
     )
-    expect(snapshot?.game?.moves[0]?.uci).toBe("e2e4")
+    expect(snapshot?.game?.gameType === "chess" && snapshot.game.moves[0]?.uci).toBe("e2e4")
+    expect(snapshot?.game).not.toHaveProperty("board")
     expect(snapshot?.game?.moves[0]?.commentary).toBe("Ocupo o centro e libero o bispo.")
     expect(snapshot?.game?.progress).toHaveLength(20)
 

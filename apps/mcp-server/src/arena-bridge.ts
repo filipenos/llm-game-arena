@@ -10,6 +10,7 @@ import {
   type AgentMetadata,
   type Color,
   type MoveCommand,
+  type GameType,
   type ServerEvent,
   type SessionSnapshot
 } from "@llm-chess/protocol"
@@ -18,6 +19,7 @@ interface ArenaPlayer {
   onEvent(handler: (event: ServerEvent) => void): void
   connect(): Promise<void>
   playMove(command: MoveCommand, expectedPly: number): void
+  playCell?(cell: number, expectedPly: number): void
   resign(): void
   close(): void
 }
@@ -29,6 +31,7 @@ interface ConnectionState {
   accepted?: Extract<ServerEvent, { type: "connection.accepted" }>
   snapshot?: SessionSnapshot
   turn?: TurnContext
+  ticTurn?: Extract<ServerEvent, { type: "tic-tac-toe.turn.started" }>
   movePending: boolean
   lastError?: { code: string; message: string }
 }
@@ -81,8 +84,12 @@ export class ArenaBridge {
     this.defaultServer = normalizeServer(defaultServer)
   }
 
-  async createGame(server?: string): Promise<unknown> {
-    return await this.requestJson(server, "/api/sessions", { method: "POST" })
+  async createGame(server?: string, gameType: GameType = "chess"): Promise<unknown> {
+    return await this.requestJson(server, "/api/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ gameType })
+    })
   }
 
   async listGames(options: {
@@ -181,6 +188,20 @@ export class ArenaBridge {
     return { submitted: uci, expectedPly: state.turn.ply }
   }
 
+  playCell(sessionId: string, cell: number, server?: string): unknown {
+    const state = this.connection(sessionId, server)
+    if (!state.ticTurn) throw new Error("It is not this player's tic-tac-toe turn")
+    if (state.movePending) throw new Error("A move is already pending confirmation")
+    if (!state.ticTurn.legalCells.includes(cell)) {
+      throw new Error(`Illegal cell. Legal cells: ${state.ticTurn.legalCells.join(" ")}`)
+    }
+    if (!state.client.playCell) throw new Error("This player client cannot play tic-tac-toe")
+    state.movePending = true
+    state.lastError = undefined
+    state.client.playCell(cell, state.ticTurn.ply)
+    return { submitted: cell, expectedPly: state.ticTurn.ply }
+  }
+
   resignGame(sessionId: string, server?: string): unknown {
     const state = this.connection(sessionId, server)
     state.client.resign()
@@ -207,8 +228,14 @@ export class ArenaBridge {
       state.movePending = false
       state.lastError = undefined
     }
-    if (event.type === "move.made" || event.type === "game.finished") {
+    if (event.type === "tic-tac-toe.turn.started") {
+      state.ticTurn = event
+      state.movePending = false
+      state.lastError = undefined
+    }
+    if (event.type === "move.made" || event.type === "tic-tac-toe.move.made" || event.type === "game.finished") {
       state.turn = undefined
+      state.ticTurn = undefined
       state.movePending = false
     }
     if (event.type === "move.invalid" || event.type === "error") {
@@ -225,6 +252,7 @@ export class ArenaBridge {
       color: state.accepted?.color ?? null,
       movePending: state.movePending,
       turn: state.turn ?? null,
+      ticTacToeTurn: state.ticTurn ?? null,
       lastError: state.lastError ?? null,
       snapshot: state.snapshot ?? null
     }

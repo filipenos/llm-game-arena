@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import type {
   Color,
   ChessMove,
+  GameType,
   LeaderboardResponse,
   Promotion,
   PublicParticipant,
@@ -29,6 +30,20 @@ import {
 const HTTP_SERVER = import.meta.env.VITE_SERVER_URL ?? window.location.origin
 const WS_SERVER = HTTP_SERVER.replace(/^http/, "ws")
 const SESSION_ID_PATTERN = /^[A-HJ-NP-Z2-9]{6}$/
+const TIC_WINNING_LINES = [
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6]
+] as const
+
+function newRequestId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("")
+}
+
+function resultCount(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`
+}
 
 class SessionRequestError extends Error {
   constructor(
@@ -65,13 +80,15 @@ interface JoinForm {
   name: string
   role: "player" | "spectator"
   color: Color | "random"
+  gameType: GameType
 }
 
 const initialJoinForm: JoinForm = {
   sessionId: "",
   name: "Human Player",
   role: "player",
-  color: "random"
+  color: "random",
+  gameType: "chess"
 }
 
 function resumeKey(sessionId: string, color: Color): string {
@@ -129,6 +146,8 @@ export function App() {
   const [snapshot, setSnapshot] = useState<SessionSnapshot>()
   const [participantId, setParticipantId] = useState<string>()
   const [legalMoves, setLegalMoves] = useState<string[]>([])
+  const [legalCells, setLegalCells] = useState<number[]>([])
+  const [pendingCell, setPendingCell] = useState<number>()
   const [movePending, setMovePending] = useState(false)
   const [startPending, setStartPending] = useState(false)
   const [connected, setConnected] = useState(false)
@@ -176,7 +195,10 @@ export function App() {
     if (!room) return
     saveRoomLocation(room)
     setLegalMoves([])
+    setLegalCells([])
+    setPendingCell(undefined)
     setMovePending(false)
+    setConnected(false)
     setControllerToken(localStorage.getItem(controllerKey(room.sessionId)) ?? "")
     let stopped = false
     let retry: number | undefined
@@ -230,6 +252,21 @@ export function App() {
           }
         } else if (event.type === "session.snapshot") {
           setSnapshot(event)
+        } else if (event.type === "tic-tac-toe.move.made") {
+          setSnapshot(current => current?.game?.gameType === "tic-tac-toe" ? {
+            ...current,
+            game: {
+              ...current.game,
+              board: event.board,
+              moves: [...current.game.moves, event.move],
+              turn: event.turn,
+              ply: event.ply
+            }
+          } : current)
+          setPendingCell(undefined)
+          setMovePending(false)
+        } else if (event.type === "move.made" || event.type === "game.finished") {
+          setPendingCell(undefined)
           setMovePending(false)
         } else if (event.type === "player.progress") {
           setSnapshot(current => current?.game ? {
@@ -241,6 +278,8 @@ export function App() {
           } : current)
         } else if (event.type === "turn.started") {
           setLegalMoves(event.legalMoves)
+        } else if (event.type === "tic-tac-toe.turn.started") {
+          setLegalCells(event.legalCells)
         } else if (
           event.type === "error"
           && resumeTokenUsed
@@ -253,23 +292,27 @@ export function App() {
           resumeTokenUsed = null
           sendPlayerJoin(null)
         } else if (event.type === "error" || event.type === "move.invalid") {
+          setPendingCell(undefined)
           setMovePending(false)
           setError(`${event.code}: ${event.message}`)
         }
       })
       socket.addEventListener("close", () => {
         setConnected(false)
+        setPendingCell(undefined)
         setMovePending(false)
         if (!stopped) retry = window.setTimeout(connect, 1_500)
       })
       socket.addEventListener("error", () => setError("Não foi possível conectar ao servidor."))
     }
 
+    connect()
     void fetchSessionSnapshot(room.sessionId)
       .then(initialSnapshot => {
         if (stopped) return
-        setSnapshot(initialSnapshot)
-        connect()
+        setSnapshot(current => current && current.revision >= initialSnapshot.revision
+          ? current
+          : initialSnapshot)
       })
       .catch(caught => {
         if (stopped) return
@@ -295,16 +338,20 @@ export function App() {
   async function createSession(): Promise<void> {
     setError("")
     try {
-      const response = await fetch(`${HTTP_SERVER}/api/sessions`, { method: "POST" })
+      const response = await fetch(`${HTTP_SERVER}/api/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ gameType: form.gameType })
+      })
       if (!response.ok) throw new Error("Falha ao criar a sessão")
       const data = await response.json() as { sessionId: string; controllerToken: string }
       localStorage.setItem(controllerKey(data.sessionId), data.controllerToken)
       setControllerToken(data.controllerToken)
       setRoom({
         sessionId: data.sessionId,
-        role: form.role,
+        role: "player",
         name: form.name,
-        ...(form.role === "player" && form.color !== "random" ? { color: form.color } : {})
+        ...(form.color !== "random" ? { color: form.color } : {})
       })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Falha ao criar a sessão")
@@ -362,6 +409,8 @@ export function App() {
     setSnapshot(undefined)
     setParticipantId(undefined)
     setLegalMoves([])
+    setLegalCells([])
+    setPendingCell(undefined)
     setMovePending(false)
     setConnected(false)
     setError("")
@@ -391,28 +440,30 @@ export function App() {
             <input value={form.name} maxLength={80} onChange={event => setForm({ ...form, name: event.target.value })} />
           </label>
           <label className="spaced-field">
-            Entrar como
+            Jogo
+            <select value={form.gameType} onChange={event => setForm({ ...form, gameType: event.target.value as GameType })}>
+              <option value="chess">Xadrez</option>
+              <option value="tic-tac-toe">Jogo da velha</option>
+            </select>
+          </label>
+          <label className="spaced-field">
+            Sua cor ou peça
+            <select value={form.color} onChange={event => setForm({ ...form, color: event.target.value as JoinForm["color"] })}>
+              <option value="random">Aleatória</option>
+              <option value="white">{form.gameType === "tic-tac-toe" ? "X" : "Brancas"}</option>
+              <option value="black">{form.gameType === "tic-tac-toe" ? "O" : "Pretas"}</option>
+            </select>
+          </label>
+          <button className="full create-button" onClick={() => void createSession()}>Criar e entrar na partida</button>
+          <div className="divider"><span>ou entre em uma sala</span></div>
+          <label className="spaced-field">
+            Entrar na sala como
             <select value={form.role} onChange={event => setForm({ ...form, role: event.target.value as JoinForm["role"] })}>
               <option value="player">Humano</option>
               <option value="spectator">Espectador</option>
             </select>
           </label>
-          {form.role === "player" ? (
-            <label className="spaced-field">
-              Cor
-              <select value={form.color} onChange={event => setForm({ ...form, color: event.target.value as JoinForm["color"] })}>
-                <option value="random">Aleatória</option>
-                <option value="white">Brancas</option>
-                <option value="black">Pretas</option>
-              </select>
-            </label>
-          ) : (
-            <p className="form-help">
-              Você acompanhará a partida sem ocupar um assento. Depois, convide duas pessoas ou conecte LLMs usando o ID da sessão.
-            </p>
-          )}
-          <button className="full create-button" onClick={() => void createSession()}>Nova partida</button>
-          <div className="divider"><span>ou entre em uma sala</span></div>
+          {form.role === "spectator" && <p className="form-help">Você acompanhará a partida sem ocupar um assento.</p>}
           <label>
             ID da sessão
             <input
@@ -435,7 +486,21 @@ export function App() {
   const mine = snapshot
     ? [snapshot.session.white, snapshot.session.black].find(player => player?.id === participantId)
     : undefined
-  const moves = snapshot?.game?.moves ?? []
+  const chessGame = snapshot?.game?.gameType === "chess" ? snapshot.game : undefined
+  const ticGame = snapshot?.game?.gameType === "tic-tac-toe" ? snapshot.game : undefined
+  const ticBoard = ticGame?.board ?? Array<Color | null>(9).fill(null)
+  const displayedTicBoard = pendingCell !== undefined && mine?.color && ticBoard[pendingCell] === null
+    ? ticBoard.map((color, index) => index === pendingCell ? mine.color : color)
+    : ticBoard
+  const winningLine = ticGame?.result?.reason === "three-in-a-row"
+    ? TIC_WINNING_LINES.find(line => line.every(cell => ticBoard[cell] === ticGame.result?.winner))
+    : undefined
+  const moves = chessGame?.moves ?? []
+  const ticTacToe = snapshot?.session.gameType === "tic-tac-toe"
+  const results = snapshot?.session.results ?? []
+  const whiteWins = results.filter(result => result.winner === "white").length
+  const blackWins = results.filter(result => result.winner === "black").length
+  const draws = results.length - whiteWins - blackWins
   return (
     <main className="arena-page">
       <header className="topbar">
@@ -444,7 +509,7 @@ export function App() {
           <h1>{room.sessionId}</h1>
         </div>
         <div className="topbar-actions">
-          <AppearanceControl appearance={appearance} onChange={updateAppearance} />
+          <AppearanceControl appearance={appearance} onChange={updateAppearance} ticTacToe={ticTacToe} />
           <span className={connected ? "connection online" : "connection"}>{connected ? "Conectado" : "Reconectando"}</span>
           <button className="text-button" onClick={leaveRoom}>Sair</button>
         </div>
@@ -454,61 +519,121 @@ export function App() {
       <section className="arena-layout">
         <aside className="players-panel">
           <PlayerCard
-            label="PRETAS"
+            label={ticTacToe ? "O" : "PRETAS"}
             player={snapshot?.session.black ?? null}
-            captures={capturedPieces(moves, "black")}
+            captures={ticTacToe ? [] : capturedPieces(moves, "black")}
+            showCaptures={!ticTacToe}
             pieceSet={appearance.pieces}
             progress={snapshot?.game?.progress.filter(item => item.color === "black") ?? []}
           />
           <div className="versus">VS</div>
           <PlayerCard
-            label="BRANCAS"
+            label={ticTacToe ? "X" : "BRANCAS"}
             player={snapshot?.session.white ?? null}
-            captures={capturedPieces(moves, "white")}
+            captures={ticTacToe ? [] : capturedPieces(moves, "white")}
+            showCaptures={!ticTacToe}
             pieceSet={appearance.pieces}
             progress={snapshot?.game?.progress.filter(item => item.color === "white") ?? []}
           />
           {snapshot?.session.status !== "playing" && snapshot?.session.status !== "finished" && (
             <div className="lobby-actions">
               {controllerToken && (
-                <button disabled={snapshot?.session.status !== "ready" || startPending} onClick={() => void startGame()}>
+                <button disabled={!connected || snapshot?.session.status !== "ready" || startPending} onClick={() => void startGame()}>
                   {startPending ? "Iniciando…" : "Iniciar partida"}
                 </button>
               )}
-              <InviteHelp sessionId={room.sessionId} />
+              {connected && <InviteHelp sessionId={room.sessionId} gameType={snapshot?.session.gameType ?? "chess"} />}
             </div>
           )}
         </aside>
 
-        <section className="board-panel">
+        <section className={`board-panel ${ticTacToe ? `theme-${appearance.theme}` : ""}`}>
           <GameStatus snapshot={snapshot} mine={mine} error={error} legalMoves={legalMoves} />
-          <ChessBoard
-            fen={snapshot?.game?.fen}
+          {ticTacToe && <div className="tic-seats" aria-label="Peças dos jogadores">
+            <span><b>X</b> {snapshot?.session.white?.name ?? "Aguardando jogador"}</span>
+            <span><b>O</b> {snapshot?.session.black?.name ?? "Aguardando jogador"}</span>
+          </div>}
+          {ticTacToe && <div className="tic-score" aria-label="Placar da sala">
+            <span><b>X</b> {whiteWins}</span>
+            <span>Empates {draws}</span>
+            <span><b>O</b> {blackWins}</span>
+          </div>}
+          {ticTacToe && mine && results.length > 0 && <p className="tic-personal-score">
+            Você: {resultCount(mine.color === "white" ? whiteWins : blackWins, "vitória", "vitórias")} · {resultCount(mine.color === "white" ? blackWins : whiteWins, "derrota", "derrotas")} · {resultCount(draws, "empate", "empates")}
+          </p>}
+          {ticTacToe ? <TicTacToeBoard
+            board={displayedTicBoard}
+            winningLine={winningLine}
+            theme={appearance.theme}
+            pieceSet={appearance.pieces}
+            enabled={Boolean(connected && !movePending && mine && snapshot?.game?.status === "playing" && snapshot.game.turn === mine.color)}
+            legalCells={legalCells}
+            onMove={cell => {
+              if (!snapshot?.game) return
+              const requestId = newRequestId()
+              setError("")
+              setMovePending(true)
+              setPendingCell(cell)
+              socketRef.current?.send(JSON.stringify({
+                type: "tic-tac-toe.play",
+                requestId,
+                expectedPly: snapshot.game.ply,
+                cell
+              }))
+            }}
+          /> : <ChessBoard
+            fen={chessGame?.fen}
             orientation={mine?.color ?? "white"}
             theme={appearance.theme}
             pieceSet={appearance.pieces}
             enabled={Boolean(connected && !movePending && mine && snapshot?.game?.status === "playing" && snapshot.game.turn === mine.color)}
             legalMoves={legalMoves}
-            lastMove={snapshot?.game?.moves.at(-1)}
+            lastMove={chessGame?.moves.at(-1)}
             onMove={(from, to, promotion) => {
               if (!snapshot?.game) return
+              const requestId = newRequestId()
               setError("")
               setMovePending(true)
               socketRef.current?.send(JSON.stringify({
                 type: "move.play",
-                requestId: crypto.randomUUID(),
+                requestId,
                 expectedPly: snapshot.game.ply,
                 from,
                 to,
                 ...(promotion ? { promotion } : {})
               }))
             }}
-          />
+          />}
+          {snapshot?.session.status === "finished" && controllerToken && (
+            <button
+              className="new-game-button"
+              disabled={!connected || !snapshot.session.white?.connected || !snapshot.session.black?.connected || startPending}
+              onClick={() => void startGame()}
+            >
+              {startPending ? "Iniciando…" : "Nova partida"}
+            </button>
+          )}
+          {ticTacToe && results.length > 0 && <section className="tic-match-history" aria-label="Histórico de partidas">
+            <h2>Histórico de partidas</h2>
+            <ol>
+              {results.map((result, index) => ({ result, round: index + 1 })).reverse().map(({ result, round }) => (
+                <li key={round}>
+                  <span>Partida {round}</span>
+                  <b>{result.winner === "white" ? "X venceu" : result.winner === "black" ? "O venceu" : "Empate"}</b>
+                  <small>{finishReasonLabel(result.reason)}</small>
+                </li>
+              ))}
+            </ol>
+          </section>}
         </section>
 
         <aside className="history-panel">
-          <p className="eyebrow">HISTÓRICO</p>
-          <MoveHistory moves={snapshot?.game?.moves ?? []} />
+          <p className="eyebrow">{ticTacToe ? "JOGADAS DA PARTIDA" : "HISTÓRICO"}</p>
+          {ticTacToe
+            ? <ol className="tic-history">{ticGame?.moves.map((move, index) => (
+              <li key={index}>{index + 1}. {move.color === "white" ? "X" : "O"} · {move.cell + 1}{move.commentary && <small>{move.commentary}</small>}</li>
+            ))}</ol>
+            : <MoveHistory moves={moves} />}
         </aside>
       </section>
     </main>
@@ -551,9 +676,9 @@ function RecentSessions({ sessions }: { sessions: SessionSummary[] }) {
           return (
             <article key={session.sessionId}>
               <div>
-                <b>{session.whiteName ?? "Brancas"}</b>
+                <b>{session.whiteName ?? (session.gameType === "tic-tac-toe" ? "X" : "Brancas")}</b>
                 <span> × </span>
-                <b>{session.blackName ?? "Pretas"}</b>
+                <b>{session.blackName ?? (session.gameType === "tic-tac-toe" ? "O" : "Pretas")}</b>
               </div>
               <small>
                 {winner ? `${winner} venceu` : "Empate"}
@@ -568,21 +693,22 @@ function RecentSessions({ sessions }: { sessions: SessionSummary[] }) {
   )
 }
 
-function InviteHelp({ sessionId }: { sessionId: string }) {
+function InviteHelp({ sessionId, gameType }: { sessionId: string; gameType: string }) {
   const commandPrefix = "npx llm-game-arena"
   return (
     <details className="invite-help" open>
       <summary>Convidar pessoas ou LLMs</summary>
       <p>Compartilhe este link. Sem uma cor definida, o servidor sorteia um assento livre:</p>
       <code>{playerInviteUrl(sessionId)}</code>
-      <p>Ou conecte um agente pelo terminal:</p>
+      {gameType === "chess" && <><p>Ou conecte um agente pelo terminal:</p>
       <code>{commandPrefix} codex {sessionId}</code>
       <code>{commandPrefix} claude {sessionId}</code>
       <code>{commandPrefix} ollama {sessionId} --model qwen3:8b</code>
       <code>{commandPrefix} lmstudio {sessionId} --model openai/gpt-oss-20b</code>
       <code>{commandPrefix} openrouter {sessionId} --model openai/gpt-oss-20b</code>
       <code>{commandPrefix} random {sessionId}</code>
-      <p className="help-note">Use <b>--seat white</b> ou <b>--seat black</b> somente quando quiser exigir uma cor.</p>
+      <p className="help-note">Use <b>--seat white</b> ou <b>--seat black</b> somente quando quiser exigir uma cor.</p></>}
+      {gameType === "tic-tac-toe" && <p>Agentes podem entrar pelo servidor MCP e jogar com <b>play_cell</b>.</p>}
     </details>
   )
 }
@@ -602,12 +728,28 @@ const pieceSetLabels: Record<PieceSet, string> = {
   pixel: "Pixel"
 }
 
+const ticPieceSetLabels: Record<PieceSet, string> = {
+  staunton: "Clássico",
+  minimal: "Leve",
+  modern: "Moderno",
+  pixel: "Pixel"
+}
+
+const ticMarks: Record<PieceSet, { white: string; black: string }> = {
+  staunton: { white: "X", black: "O" },
+  minimal: { white: "×", black: "○" },
+  modern: { white: "✕", black: "◯" },
+  pixel: { white: "X", black: "O" }
+}
+
 function AppearanceControl({
   appearance,
-  onChange
+  onChange,
+  ticTacToe
 }: {
   appearance: BoardAppearance
   onChange: (appearance: BoardAppearance) => void
+  ticTacToe: boolean
 }) {
   return (
     <details className="appearance-control">
@@ -628,7 +770,7 @@ function AppearanceControl({
             </button>
           ))}
         </div>
-        <p className="eyebrow piece-heading">PEÇAS</p>
+        <p className="eyebrow piece-heading">{ticTacToe ? "ESTILO DAS PEÇAS" : "PEÇAS"}</p>
         <div className="appearance-options piece-options">
           {pieceSets.map(pieces => (
             <button
@@ -638,8 +780,10 @@ function AppearanceControl({
               aria-pressed={appearance.pieces === pieces}
               onClick={() => onChange({ ...appearance, pieces })}
             >
-              <span className="piece-preview" aria-hidden="true">{pieceSymbol("N", pieces)}</span>
-              <small>{pieceSetLabels[pieces]}</small>
+              {ticTacToe
+                ? <span className="tic-piece-preview" aria-hidden="true"><b>{ticMarks[pieces].white}</b><b>{ticMarks[pieces].black}</b></span>
+                : <span className="piece-preview" aria-hidden="true">{pieceSymbol("N", pieces)}</span>}
+              <small>{ticTacToe ? ticPieceSetLabels[pieces] : pieceSetLabels[pieces]}</small>
             </button>
           ))}
         </div>
@@ -652,12 +796,14 @@ function PlayerCard({
   label,
   player,
   captures,
+  showCaptures = true,
   pieceSet,
   progress
 }: {
   label: string
   player: PublicParticipant | null
   captures: string[]
+  showCaptures?: boolean
   pieceSet: PieceSet
   progress: PlayerProgress[]
 }) {
@@ -700,7 +846,7 @@ function PlayerCard({
           ))}
         </ol>
       )}
-      <div className="captured-pieces" aria-label={`Peças capturadas por ${player?.name ?? label}`}>
+      {showCaptures && <div className="captured-pieces" aria-label={`Peças capturadas por ${player?.name ?? label}`}>
         <span>Capturadas</span>
         {captures.length > 0 ? (
           <div>{captures.map((piece, index) => (
@@ -713,7 +859,7 @@ function PlayerCard({
             </i>
           ))}</div>
         ) : <small>Nenhuma</small>}
-      </div>
+      </div>}
     </article>
   )
 }
@@ -745,24 +891,26 @@ function GameStatus({
   if (snapshot.game.result) {
     return (
       <p className="game-status result">
-        Fim: {finishReasonLabel(snapshot.game.result.reason)} · {snapshot.game.result.winner ? `${snapshot.game.result.winner === "white" ? "brancas" : "pretas"} venceram` : "empate"}
+        Fim: {finishReasonLabel(snapshot.game.result.reason)} · {snapshot.game.result.winner ? snapshot.session.gameType === "tic-tac-toe" ? `${snapshot.game.result.winner === "white" ? "X" : "O"} venceu` : `${snapshot.game.result.winner === "white" ? "brancas" : "pretas"} venceram` : "empate"}
       </p>
     )
   }
   const remaining = deadline ? ` · ${formatRemainingTime(deadline - now)}` : ""
   const ownTurn = mine?.color === snapshot.game.turn
   if (ownTurn) {
-    const lastMove = snapshot.game.moves.at(-1)?.san ?? ""
+    const lastMove = snapshot.game.gameType === "chess" ? snapshot.game.moves.at(-1)?.san ?? "" : ""
     const inCheck = /[+#]$/.test(lastMove)
     return (
       <p className={`game-status ${inCheck ? "check" : ""}`}>
-        {inCheck ? "Sua vez — xeque" : "Sua vez"}
+        {snapshot.game.gameType === "tic-tac-toe"
+          ? `Sua vez — marque ${mine?.color === "white" ? "X" : "O"}`
+          : inCheck ? "Sua vez — xeque" : "Sua vez"}
         {legalMoves.length === 1 ? " · única jogada legal destacada" : ""}
         {remaining}
       </p>
     )
   }
-  return <p className="game-status">Vez das {snapshot.game.turn === "white" ? "brancas" : "pretas"}{remaining}</p>
+  return <p className="game-status">Vez de {snapshot.session.gameType === "tic-tac-toe" ? (snapshot.game.turn === "white" ? "X" : "O") : (snapshot.game.turn === "white" ? "brancas" : "pretas")}{remaining}</p>
 }
 
 function formatRemainingTime(milliseconds: number): string {
@@ -780,7 +928,8 @@ function finishReasonLabel(reason: string): string {
     draw: "empate",
     resignation: "desistência",
     "turn-timeout": "tempo esgotado",
-    "move-limit": "limite de jogadas"
+    "move-limit": "limite de jogadas",
+    "three-in-a-row": "três em linha"
   } as Record<string, string>)[reason] ?? reason
 }
 
@@ -799,6 +948,46 @@ function parseFen(fen?: string): Map<string, string> {
     }
   })
   return board
+}
+
+function TicTacToeBoard({
+  board,
+  winningLine,
+  theme,
+  pieceSet,
+  enabled,
+  legalCells,
+  onMove
+}: {
+  board: Array<Color | null>
+  winningLine?: readonly [number, number, number]
+  theme: BoardTheme
+  pieceSet: PieceSet
+  enabled: boolean
+  legalCells: number[]
+  onMove: (cell: number) => void
+}) {
+  return <div className={`tic-board theme-${theme} piece-set-${pieceSet}`} role="group" aria-label="Tabuleiro de jogo da velha">
+    {Array.from({ length: 9 }, (_, cell) => {
+      const color = board[cell]
+      return <button
+        key={cell}
+        type="button"
+        className={`tic-cell ${color ?? "empty"}`}
+        aria-label={`Casa ${cell + 1}${color ? `, ${color === "white" ? "X" : "O"}` : ""}`}
+        disabled={!enabled || !legalCells.includes(cell) || color !== null}
+        onClick={() => onMove(cell)}
+      >{color ? ticMarks[pieceSet][color] : ""}</button>
+    })}
+    {winningLine && <svg className="tic-winning-line" viewBox="0 0 300 300" aria-hidden="true">
+      <line
+        x1={(winningLine[0] % 3) * 100 + 50}
+        y1={Math.floor(winningLine[0] / 3) * 100 + 50}
+        x2={(winningLine[2] % 3) * 100 + 50}
+        y2={Math.floor(winningLine[2] / 3) * 100 + 50}
+      />
+    </svg>}
+  </div>
 }
 
 function ChessBoard({
