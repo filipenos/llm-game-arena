@@ -53,7 +53,11 @@ describe("ArenaBridge", () => {
     )
 
     await expect(bridge.createGame()).resolves.toEqual({ sessionId: "K7P4QX" })
-    expect(request).toHaveBeenCalledWith("http://localhost:6464/api/sessions", { method: "POST" })
+    expect(request).toHaveBeenCalledWith("http://localhost:6464/api/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ gameType: "chess" })
+    })
   })
 
   it("joins in manual mode and only submits a listed legal move", async () => {

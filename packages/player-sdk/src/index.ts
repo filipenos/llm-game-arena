@@ -128,6 +128,18 @@ export class PlayerClient {
     })
   }
 
+  playCell(cell: number, expectedPly: number, commentary?: string): void {
+    if (!this.accepted) throw new Error("Player is not connected")
+    this.send({ type: "player.status", status: "decided" })
+    this.send({
+      type: "tic-tac-toe.play",
+      requestId: randomUUID(),
+      expectedPly,
+      cell,
+      ...(commentary ? { commentary } : {})
+    })
+  }
+
   close(): void {
     this.socket?.close()
   }

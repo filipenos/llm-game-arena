@@ -3,6 +3,7 @@
 import { DurableObject } from "cloudflare:workers"
 import {
   parseClientEvent,
+  gameTypeSchema,
   leaderboardGroupSchema,
   sessionIdSchema,
   type AgentMetadata,
@@ -102,7 +103,10 @@ function sessionStub(env: Env, sessionId: string): DurableObjectStub<SessionDura
   return env.SESSIONS.get(env.SESSIONS.idFromName(sessionId))
 }
 
-async function createSession(env: Env): Promise<Response> {
+async function createSession(request: Request, env: Env): Promise<Response> {
+  const body = await request.json().catch(() => ({})) as { gameType?: unknown }
+  const gameType = gameTypeSchema.safeParse(body.gameType ?? "chess")
+  if (!gameType.success) return json({ code: "INVALID_MESSAGE", message: "Invalid game type" }, 400)
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const sessionId = makeSessionId()
     const existing = await env.DB.prepare("SELECT id FROM sessions WHERE id = ?")
@@ -112,7 +116,7 @@ async function createSession(env: Env): Promise<Response> {
 
     const response = await sessionStub(env, sessionId).fetch("https://session/initialize", {
       method: "POST",
-      body: JSON.stringify({ sessionId })
+      body: JSON.stringify({ sessionId, gameType: gameType.data })
     })
     if (response.ok) return response
   }
@@ -214,7 +218,7 @@ async function leaderboard(request: Request, env: Env): Promise<Response> {
 async function routeApi(request: Request, env: Env): Promise<Response | undefined> {
   const url = new URL(request.url)
   if (url.pathname === "/api/sessions" && request.method === "POST") {
-    return await createSession(env)
+    return await createSession(request, env)
   }
   if (url.pathname === "/api/sessions" && request.method === "GET") {
     return await listSessions(request, env)
@@ -281,8 +285,10 @@ export class SessionDurableObject extends DurableObject<Env> {
     try {
       const url = new URL(request.url)
       if (url.pathname === "/initialize" && request.method === "POST") {
-        const body = await request.json() as { sessionId?: string }
-        return await this.initialize(parseSessionId(body.sessionId))
+        const body = await request.json() as { sessionId?: string; gameType?: unknown }
+        const gameType = gameTypeSchema.safeParse(body.gameType ?? "chess")
+        if (!gameType.success) return json({ code: "INVALID_MESSAGE", message: "Invalid game type" }, 400)
+        return await this.initialize(parseSessionId(body.sessionId), gameType.data)
       }
 
       await this.ensureLoaded()
@@ -361,13 +367,13 @@ export class SessionDurableObject extends DurableObject<Env> {
     await this.persist()
   }
 
-  private async initialize(sessionId: string): Promise<Response> {
+  private async initialize(sessionId: string, gameType: "chess" | "tic-tac-toe"): Promise<Response> {
     const existing = await this.context.storage.get<PersistedSession>("session")
     if (existing) {
       return json({ code: "INVALID_MESSAGE", message: "Session already exists" }, 409)
     }
     const manager = new SessionManager()
-    this.session = manager.createSession(sessionId)
+    this.session = manager.createSession(sessionId, gameType)
     this.arena = new ArenaService(manager, { manageTurnTimers: false })
     await this.persist()
     return json({

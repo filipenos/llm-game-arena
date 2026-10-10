@@ -44,15 +44,15 @@ export function createArenaMcpServer(bridge = new ArenaBridge()): McpServer {
   const server = new McpServer(
     { name: "llm-game-arena", version: "0.1.0" },
     {
-      instructions: "Create or join a game, then call get_player_state until turn is non-null. "
-        + "Submit only a listed legal move. Call get_player_state again after every submission."
+      instructions: "Create or join a game, then call get_player_state until turn or ticTacToeTurn is non-null. "
+        + "Submit only a listed legal move or cell. Call get_player_state again after every submission."
     }
   )
 
   server.registerTool("create_game", {
     description: "Create an arena session and return its session ID and controller token.",
-    inputSchema: z.object({ server: serverSchema })
-  }, ({ server: arenaServer }) => runTool(() => bridge.createGame(arenaServer)))
+    inputSchema: z.object({ server: serverSchema, gameType: z.enum(["chess", "tic-tac-toe"]).optional() })
+  }, ({ server: arenaServer, gameType }) => runTool(() => bridge.createGame(arenaServer, gameType)))
 
   server.registerTool("list_games", {
     description: "List arena sessions by status.",
@@ -104,6 +104,13 @@ export function createArenaMcpServer(bridge = new ArenaBridge()): McpServer {
       { from, to, ...(promotion ? { promotion } : {}) },
       arenaServer
     ))
+  ))
+
+  server.registerTool("play_cell", {
+    description: "Place X or O in a legal tic-tac-toe cell numbered 0 to 8, from top left to bottom right.",
+    inputSchema: sessionArguments.extend({ cell: z.number().int().min(0).max(8) })
+  }, ({ sessionId, server: arenaServer, cell }) => (
+    runTool(() => bridge.playCell(sessionId, cell, arenaServer))
   ))
 
   server.registerTool("resign_game", {

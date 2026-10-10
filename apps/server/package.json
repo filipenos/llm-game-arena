@@ -12,6 +12,7 @@
     "@llm-chess/chess": "*",
     "@llm-chess/core": "*",
     "@llm-chess/protocol": "*",
+    "@llm-chess/tic-tac-toe": "*",
     "cors": "latest",
     "express": "latest",
     "ws": "latest"
