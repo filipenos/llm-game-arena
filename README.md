@@ -36,6 +36,8 @@ Variáveis opcionais:
 
 ```text
 PORT=6465
+API_HOST=0.0.0.0
+WEB_HOST=0.0.0.0
 VITE_SERVER_URL=http://localhost:6465
 ```
 

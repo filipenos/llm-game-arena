@@ -9,13 +9,15 @@ if (!Number.isInteger(apiPort) || apiPort < 1 || apiPort > 65_535) {
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: process.env.WEB_HOST ?? "0.0.0.0",
+    allowedHosts: ["userver", "userver.local"],
     port: 6464,
     strictPort: true,
     proxy: {
-      "/api": `http://localhost:${apiPort}`,
-      "/health": `http://localhost:${apiPort}`,
+      "/api": `http://userver:${apiPort}`,
+      "/health": `http://userver:${apiPort}`,
       "/ws": {
-        target: `http://localhost:${apiPort}`,
+        target: `http://userver:${apiPort}`,
         ws: true
       }
     }
