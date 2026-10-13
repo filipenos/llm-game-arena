@@ -10,7 +10,7 @@ export interface ArenaGame {
   finish(outcome: GameResult): GameResult | undefined
 }
 
-export type GameActionEvent = Extract<ClientEvent, { type: "move.play" | "tic-tac-toe.play" }>
+export type GameActionEvent = Extract<ClientEvent, { type: "move.play" | "tic-tac-toe.play" | "checkers.play" }>
 
 export interface GameAdapter {
   readonly gameType: GameType

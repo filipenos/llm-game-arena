@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 import type { PlayerClientOptions } from "@llm-chess/player-sdk"
-import type { MoveCommand, ServerEvent } from "@llm-chess/protocol"
+import type { CheckersCommand, MoveCommand, ServerEvent } from "@llm-chess/protocol"
 import { ArenaBridge } from "./arena-bridge.js"
 
 class MockPlayer {
   private handler?: (event: ServerEvent) => void
   readonly moves: Array<{ command: MoveCommand; ply: number }> = []
+  readonly checkersMoves: Array<{ command: CheckersCommand; ply: number }> = []
   closed = false
 
   onEvent(handler: (event: ServerEvent) => void): void {
@@ -25,6 +26,10 @@ class MockPlayer {
 
   playMove(command: MoveCommand, expectedPly: number): void {
     this.moves.push({ command, ply: expectedPly })
+  }
+
+  playCheckers(command: CheckersCommand, expectedPly: number): void {
+    this.checkersMoves.push({ command, ply: expectedPly })
   }
 
   resign(): void {}
@@ -105,6 +110,30 @@ describe("ArenaBridge", () => {
     expect(() => bridge.playMove("K7P4QX", { from: "e2", to: "e4" })).toThrow(
       "A move is already pending confirmation"
     )
+  })
+
+  it("submits only a complete legal checkers path", async () => {
+    const player = new MockPlayer()
+    const bridge = new ArenaBridge(
+      "ws://localhost:6464",
+      vi.fn<typeof fetch>(),
+      () => player,
+      { getOrCreate: () => "identity-token-with-enough-characters" }
+    )
+    await bridge.joinGame({
+      sessionId: "K7P4QX", name: "Agent",
+      agent: { player: "codex", provider: "openai", model: "test-model" }
+    })
+    player.emit({
+      type: "checkers.turn.started", gameId: "game-1", board: Array(64).fill(null),
+      color: "white", ply: 2,
+      legalMoves: [{ from: 42, path: [28, 14], captures: [35, 21] }]
+    })
+    expect(() => bridge.playCheckers("K7P4QX", { from: 42, path: [28] })).toThrow("Illegal checkers move")
+    expect(bridge.playCheckers("K7P4QX", { from: 42, path: [28, 14] })).toEqual({
+      submitted: { from: 42, path: [28, 14] }, expectedPly: 2
+    })
+    expect(player.checkersMoves).toEqual([{ command: { from: 42, path: [28, 14] }, ply: 2 }])
   })
 
   it("returns stable arena errors without exposing response internals", async () => {

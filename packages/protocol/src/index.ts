@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 export const colorSchema = z.enum(["white", "black"])
-export const gameTypeSchema = z.enum(["chess", "tic-tac-toe"])
+export const gameTypeSchema = z.enum(["chess", "tic-tac-toe", "checkers"])
 export const participantTypeSchema = z.enum(["human", "agent", "engine"])
 export const sessionStatusSchema = z.enum(["waiting", "ready", "playing", "finished"])
 export const activitySchema = z.enum(["idle", "thinking", "decided"])
@@ -68,6 +68,26 @@ export interface TicTacToeMove {
   commentary?: string
 }
 
+export interface CheckersPiece {
+  color: Color
+  king: boolean
+}
+
+export interface CheckersCommand {
+  from: number
+  path: number[]
+}
+
+export interface CheckersAction extends CheckersCommand {
+  captures: number[]
+}
+
+export interface CheckersMove extends CheckersAction {
+  color: Color
+  promoted: boolean
+  commentary?: string
+}
+
 export interface PlayerProgressMetrics {
   attempt?: number
   elapsedMs?: number
@@ -101,6 +121,8 @@ export type GameFinishReason =
   | "turn-timeout"
   | "move-limit"
   | "three-in-a-row"
+  | "no-legal-moves"
+  | "no-progress"
 
 export interface GameResult {
   reason: GameFinishReason
@@ -142,7 +164,13 @@ export interface PublicTicTacToeGame extends PublicGameBase {
   moves: TicTacToeMove[]
 }
 
-export type PublicGame = PublicChessGame | PublicTicTacToeGame
+export interface PublicCheckersGame extends PublicGameBase {
+  gameType: "checkers"
+  board: Array<CheckersPiece | null>
+  moves: CheckersMove[]
+}
+
+export type PublicGame = PublicChessGame | PublicTicTacToeGame | PublicCheckersGame
 
 export interface SessionSnapshot {
   revision: number
@@ -259,6 +287,14 @@ export const clientEventSchema = z.union([
     cell: z.number().int().min(0).max(8),
     commentary: singleLineTextSchema.optional()
   }).strict(),
+  z.object({
+    type: z.literal("checkers.play"),
+    requestId: requestIdSchema,
+    expectedPly: z.number().int().nonnegative(),
+    from: z.number().int().min(0).max(63),
+    path: z.array(z.number().int().min(0).max(63)).min(1).max(12),
+    commentary: singleLineTextSchema.optional()
+  }).strict(),
   z.object({ type: z.literal("game.resign") })
 ])
 
@@ -298,6 +334,9 @@ export type ServerEvent =
   | { type: "tic-tac-toe.started"; gameId: string; board: Array<Color | null>; turn: Color }
   | { type: "tic-tac-toe.turn.started"; gameId: string; board: Array<Color | null>; color: Color; ply: number; legalCells: number[] }
   | { type: "tic-tac-toe.move.made"; requestId: string; participantId: string; move: TicTacToeMove; board: Array<Color | null>; turn: Color; ply: number }
+  | { type: "checkers.started"; gameId: string; board: Array<CheckersPiece | null>; turn: Color }
+  | { type: "checkers.turn.started"; gameId: string; board: Array<CheckersPiece | null>; color: Color; ply: number; legalMoves: CheckersAction[] }
+  | { type: "checkers.move.made"; requestId: string; participantId: string; move: CheckersMove; board: Array<CheckersPiece | null>; turn: Color; ply: number }
   | {
       type: "turn.started"
       gameId: string

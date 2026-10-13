@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import type {
   ChessMove,
+  CheckersCommand,
   AgentMetadata,
   Color,
   MoveCommand,
@@ -136,6 +137,19 @@ export class PlayerClient {
       requestId: randomUUID(),
       expectedPly,
       cell,
+      ...(commentary ? { commentary } : {})
+    })
+  }
+
+  playCheckers(command: CheckersCommand, expectedPly: number, commentary?: string): void {
+    if (!this.accepted) throw new Error("Player is not connected")
+    this.send({ type: "player.status", status: "decided" })
+    this.send({
+      type: "checkers.play",
+      requestId: randomUUID(),
+      expectedPly,
+      from: command.from,
+      path: command.path,
       ...(commentary ? { commentary } : {})
     })
   }

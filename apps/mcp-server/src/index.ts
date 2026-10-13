@@ -44,14 +44,14 @@ export function createArenaMcpServer(bridge = new ArenaBridge()): McpServer {
   const server = new McpServer(
     { name: "llm-game-arena", version: "0.1.0" },
     {
-      instructions: "Create or join a game, then call get_player_state until turn or ticTacToeTurn is non-null. "
-        + "Submit only a listed legal move or cell. Call get_player_state again after every submission."
+      instructions: "Create or join a game, then call get_player_state until turn, ticTacToeTurn or checkersTurn is non-null. "
+        + "Submit only a listed legal action. Call get_player_state again after every submission."
     }
   )
 
   server.registerTool("create_game", {
     description: "Create an arena session and return its session ID and controller token.",
-    inputSchema: z.object({ server: serverSchema, gameType: z.enum(["chess", "tic-tac-toe"]).optional() })
+    inputSchema: z.object({ server: serverSchema, gameType: z.enum(["chess", "tic-tac-toe", "checkers"]).optional() })
   }, ({ server: arenaServer, gameType }) => runTool(() => bridge.createGame(arenaServer, gameType)))
 
   server.registerTool("list_games", {
@@ -111,6 +111,16 @@ export function createArenaMcpServer(bridge = new ArenaBridge()): McpServer {
     inputSchema: sessionArguments.extend({ cell: z.number().int().min(0).max(8) })
   }, ({ sessionId, server: arenaServer, cell }) => (
     runTool(() => bridge.playCell(sessionId, cell, arenaServer))
+  ))
+
+  server.registerTool("play_checkers", {
+    description: "Submit a complete legal Brazilian checkers move. Use from and path from checkersTurn.legalMoves; path contains each landing square in a capture sequence.",
+    inputSchema: sessionArguments.extend({
+      from: z.number().int().min(0).max(63),
+      path: z.array(z.number().int().min(0).max(63)).min(1).max(12)
+    })
+  }, ({ sessionId, server: arenaServer, from, path }) => (
+    runTool(() => bridge.playCheckers(sessionId, { from, path }, arenaServer))
   ))
 
   server.registerTool("resign_game", {

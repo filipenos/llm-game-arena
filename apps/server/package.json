@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@llm-chess/chess": "*",
+    "@llm-chess/checkers": "*",
     "@llm-chess/core": "*",
     "@llm-chess/protocol": "*",
     "@llm-chess/tic-tac-toe": "*",

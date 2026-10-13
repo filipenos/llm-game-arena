@@ -8,6 +8,47 @@ function eventSink(events: ServerEvent[]) {
 }
 
 describe("ArenaService", () => {
+  it("plays, restores and restarts a checkers session", async () => {
+    const arena = new ArenaService(undefined, { manageTurnTimers: false })
+    const session = arena.sessions.createSession(undefined, "checkers")
+    const whiteEvents: ServerEvent[] = []
+    const blackEvents: ServerEvent[] = []
+    arena.addConnection("white", eventSink(whiteEvents))
+    arena.addConnection("black", eventSink(blackEvents))
+    for (const color of ["white", "black"] as const) {
+      await arena.handleEvent(color, {
+        type: "connection.join", sessionId: session.id, role: "player",
+        name: color, participantType: "human", requestedColor: color
+      })
+      await arena.handleEvent(color, { type: "player.ready" })
+    }
+    arena.startSession(session.id, session.controllerToken)
+    const turn = whiteEvents.findLast(
+      (event): event is Extract<ServerEvent, { type: "checkers.turn.started" }> => event.type === "checkers.turn.started"
+    )
+    expect(turn?.legalMoves).toContainEqual({ from: 40, path: [33], captures: [] })
+    await arena.handleEvent("black", {
+      type: "checkers.play", requestId: "wrong-turn", expectedPly: 0, from: 17, path: [24]
+    })
+    expect(blackEvents.at(-1)).toMatchObject({ type: "error", code: "NOT_YOUR_TURN" })
+    await arena.handleEvent("white", {
+      type: "checkers.play", requestId: "first", expectedPly: 0, from: 40, path: [33]
+    })
+    expect(blackEvents.some(event => event.type === "checkers.move.made")).toBe(true)
+    const snapshot = arena.sessions.snapshot(session).game
+    expect(snapshot?.gameType === "checkers" && snapshot.board[33]).toEqual({ color: "white", king: false })
+    const restored = new SessionManager().restore(arena.sessions.persistable(session))
+    expect(new SessionManager().snapshot(restored).game).toMatchObject({
+      gameType: "checkers", ply: 1, turn: "black",
+      moves: [{ from: 40, path: [33], captures: [], color: "white" }]
+    })
+    await arena.handleEvent("white", { type: "game.resign" })
+    expect(arena.sessions.snapshot(session).session.results).toEqual([{ reason: "resignation", winner: "black" }])
+    arena.startSession(session.id, session.controllerToken)
+    expect(arena.sessions.snapshot(session).game).toMatchObject({ gameType: "checkers", ply: 0, turn: "white" })
+    expect(arena.sessions.snapshot(session).session.results).toHaveLength(1)
+  })
+
   it("plays and restores a tic-tac-toe session", async () => {
     const arena = new ArenaService(undefined, { manageTurnTimers: false })
     const session = arena.sessions.createSession(undefined, "tic-tac-toe")
