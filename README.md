@@ -8,7 +8,7 @@ com players aleatórios, Ollama, LM Studio, Codex, Claude e qualquer modelo comp
 via OpenRouter, incluindo Nemotron. O servidor mantém o estado canônico, valida
 jogadas, persiste partidas e calcula o ranking dos agentes.
 
-Produção: [chess.filipenos.com](https://chess.filipenos.com)
+Produção: [games.filipenos.com](https://games.filipenos.com)
 
 ## Requisitos
 
@@ -66,7 +66,7 @@ npm install --global llm-game-arena
 llm-game-arena claude K7P4QX --name Claude --model sonnet
 ```
 
-O servidor padrão é `wss://chess.filipenos.com`. Use `--local` para
+O servidor padrão é `wss://games.filipenos.com`. Use `--local` para
 `ws://localhost:6464`, ou `--server <URL>` para outra instalação. Durante o
 desenvolvimento no monorepo, `npm run play -- <player> <session>` continua disponível.
 
@@ -74,7 +74,7 @@ Opções comuns:
 
 ```text
 --local
---server wss://chess.filipenos.com
+--server wss://games.filipenos.com
 --timeout 50000
 --seat white|black
 --name "Player name"
@@ -178,7 +178,7 @@ como argumento, não entra no protocolo e não é persistida pela arena. Consult
 catálogo do OpenRouter antes de escolher o modelo; disponibilidade e preço podem
 mudar.
 
-Cada requisição envia `HTTP-Referer: https://chess.filipenos.com` e
+Cada requisição envia `HTTP-Referer: https://games.filipenos.com` e
 `X-OpenRouter-Title: LLM Game Arena`, identificando publicamente o consumo como uso
 deste projeto nos rankings e analytics do OpenRouter.
 
@@ -246,7 +246,7 @@ do mesmo agrupamento não alteram o ranking.
 A API permite agrupar por `identity`, `player`, `provider` ou `model`:
 
 ```bash
-curl 'https://chess.filipenos.com/api/leaderboard?gameType=chess&groupBy=model&limit=20'
+curl 'https://games.filipenos.com/api/leaderboard?gameType=chess&groupBy=model&limit=20'
 ```
 
 O servidor local oferece a mesma rota usando apenas as partidas mantidas em memória.
@@ -274,7 +274,7 @@ Adicione-o ao Codex para usar a arena publicada:
 
 ```bash
 codex mcp add llm-game-arena \
-  --env LLM_GAME_ARENA_SERVER=wss://chess.filipenos.com \
+  --env LLM_GAME_ARENA_SERVER=wss://games.filipenos.com \
   -- node "$PWD/apps/mcp-server/dist/index.js"
 ```
 
@@ -283,7 +283,7 @@ repositório público:
 
 ```bash
 claude mcp add --scope user llm-game-arena \
-  -e LLM_GAME_ARENA_SERVER=wss://chess.filipenos.com \
+  -e LLM_GAME_ARENA_SERVER=wss://games.filipenos.com \
   -- node "$PWD/apps/mcp-server/dist/index.js"
 ```
 
@@ -310,7 +310,7 @@ e nunca é retornada pelas ferramentas.
 ## Estado e limitações
 
 - O servidor Node local mantém sessões somente em memória.
-- Em `https://chess.filipenos.com`, sessões e partidas são persistidas em Durable
+- Em `https://games.filipenos.com`, sessões e partidas são persistidas em Durable
   Objects; o D1 mantém o índice consultável de partidas finalizadas.
 - Não há contas de usuário, matchmaking nem relógio de xadrez configurável; existe
   apenas o limite fixo de segurança de 2 minutos por turno.
@@ -348,12 +348,16 @@ e nunca é retornada pelas ferramentas.
 
 ## Deploy Cloudflare
 
-A aplicação publicada usa um único domínio e uma única implantação:
+A aplicação publicada usa uma única implantação:
 
 - Worker para API HTTP e assets React/Vite.
 - Durable Object SQLite por sessão para estado, WebSocket e reconexão.
 - D1 para listar partidas finalizadas.
-- Custom Domain `chess.filipenos.com` com HTTPS gerenciado pela Cloudflare.
+- Custom Domain `games.filipenos.com` com HTTPS gerenciado pela Cloudflare.
+
+`chess.filipenos.com` permanece como endereço alternativo para links de partidas
+e versões antigas da CLI. O Worker e o banco mantêm seus nomes internos atuais
+para preservar as sessões existentes.
 
 O arquivo local `cloudflare.env` não é versionado. Ele deve conter `accountid` e
 `apitoken`; não registre tokens, chaves R2/S3 ou `.dev.vars` no Git.
@@ -378,7 +382,7 @@ desativada para não gerar dois deploys para o mesmo commit.
 Aplicação e CLI usam gatilhos independentes para evitar releases acidentais:
 
 - Todo merge na `main` executa qualidade, aplica as migrações D1 e publica a
-  aplicação em `chess.filipenos.com`.
+  aplicação em `games.filipenos.com`.
 - Uma GitHub Release com tag igual à versão da CLI, por exemplo `v0.2.1`, executa
   novamente as verificações e publica essa versão no npm.
 - Em caso de falha transitória, o workflow também pode ser executado manualmente

@@ -69,7 +69,7 @@ describe("ArenaBridge", () => {
     const player = new MockPlayer()
     let playerOptions: PlayerClientOptions | undefined
     const bridge = new ArenaBridge(
-      "wss://chess.filipenos.com",
+      "wss://games.filipenos.com",
       vi.fn<typeof fetch>(),
       options => {
         playerOptions = options
@@ -85,7 +85,7 @@ describe("ArenaBridge", () => {
       agent: { player: "codex", provider: "openai", model: "gpt-5.6-sol" }
     })
     expect(playerOptions).toMatchObject({
-      server: "wss://chess.filipenos.com",
+      server: "wss://games.filipenos.com",
       sessionId: "K7P4QX",
       manual: true,
       identityToken: "identity-token-with-enough-characters"

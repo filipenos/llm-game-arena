@@ -430,7 +430,7 @@ export function createOpenRouterPlayer(
     headers: {
       authorization: `Bearer ${options.openRouterApiKey}`,
       "content-type": "application/json",
-      "http-referer": "https://chess.filipenos.com",
+      "http-referer": "https://games.filipenos.com",
       "x-openrouter-title": "LLM Game Arena"
     },
     extraBody: { provider: { require_parameters: true } }

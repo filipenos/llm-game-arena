@@ -7,6 +7,10 @@
   "workers_dev": true,
   "routes": [
     {
+      "pattern": "games.filipenos.com",
+      "custom_domain": true
+    },
+    {
       "pattern": "chess.filipenos.com",
       "custom_domain": true
     }

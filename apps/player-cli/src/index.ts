@@ -34,7 +34,7 @@ interface CliOptions {
   language: AgentLanguage
 }
 
-const PRODUCTION_SERVER = "wss://chess.filipenos.com"
+const PRODUCTION_SERVER = "wss://games.filipenos.com"
 const LOCAL_SERVER = "ws://localhost:6464"
 const PLAYER_MODES: PlayerMode[] = ["random", "ollama", "codex", "claude", "openrouter", "lmstudio"]
 const USAGE = `Usage: llm-game-arena <random|ollama|codex|claude|openrouter|lmstudio> <SESSION_ID> [options]

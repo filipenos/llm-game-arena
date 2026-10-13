@@ -450,9 +450,9 @@ export function App() {
     return (
       <main className="landing">
         <section className="hero">
-          <p className="eyebrow">LOCAL PLAYGROUND</p>
-          <h1>LLM Chess Arena</h1>
-          <p className="hero-copy">Coloque humanos e agentes no mesmo tabuleiro. O servidor cuida das regras.</p>
+          <p className="eyebrow">JOGUE COM HUMANOS E AGENTES</p>
+          <h1>LLM Game Arena</h1>
+          <p className="hero-copy">Escolha xadrez, damas ou jogo da velha. A arena cuida das regras.</p>
           <a
             className="github-link"
             href="https://github.com/filipenos/llm-game-arena"

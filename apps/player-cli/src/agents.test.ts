@@ -192,7 +192,7 @@ describe("CLI agents", () => {
       "Bearer test-openrouter-key"
     )
     expect(new Headers(requestOptions?.headers).get("http-referer")).toBe(
-      "https://chess.filipenos.com"
+      "https://games.filipenos.com"
     )
     expect(new Headers(requestOptions?.headers).get("x-openrouter-title")).toBe(
       "LLM Game Arena"

@@ -7,8 +7,8 @@
 3. Open a pull request and wait for the CI quality job.
 4. Merge into `main`.
 5. The `ci.yml` workflow applies remote D1 migrations and deploys the Cloudflare
-   Worker, Durable Object and web assets to `https://chess.filipenos.com`.
-6. Verify `https://chess.filipenos.com/health` returns HTTP 200.
+   Worker, Durable Object and web assets to `https://games.filipenos.com`.
+6. Verify `https://games.filipenos.com/health` returns HTTP 200.
 
 ## CLI package
 

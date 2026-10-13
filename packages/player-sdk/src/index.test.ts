@@ -3,8 +3,8 @@ import { playerWebSocketUrl } from "./index.js"
 
 describe("playerWebSocketUrl", () => {
   it("includes the session ID for routed WebSocket backends", () => {
-    expect(playerWebSocketUrl("wss://chess.filipenos.com", "K7P4QX").toString()).toBe(
-      "wss://chess.filipenos.com/ws?session=K7P4QX"
+    expect(playerWebSocketUrl("wss://games.filipenos.com", "K7P4QX").toString()).toBe(
+      "wss://games.filipenos.com/ws?session=K7P4QX"
     )
   })
 
