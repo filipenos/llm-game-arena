@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type {
+  CheckersAction,
+  CheckersPiece,
   Color,
   ChessMove,
   GameType,
@@ -26,6 +28,7 @@ import {
   type BoardTheme,
   type PieceSet
 } from "./appearance.js"
+import { CheckersBoard } from "./checkers-board.js"
 
 const HTTP_SERVER = import.meta.env.VITE_SERVER_URL ?? window.location.origin
 const WS_SERVER = HTTP_SERVER.replace(/^http/, "ws")
@@ -43,6 +46,14 @@ function newRequestId(): string {
 
 function resultCount(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`
+}
+
+function checkersSquareName(index: number): string {
+  return `${String.fromCharCode(97 + index % 8)}${8 - Math.floor(index / 8)}`
+}
+
+function checkersMoveLabel(from: number, path: number[], capture: boolean): string {
+  return [from, ...path].map(checkersSquareName).join(capture ? ":" : "-")
 }
 
 class SessionRequestError extends Error {
@@ -147,6 +158,7 @@ export function App() {
   const [participantId, setParticipantId] = useState<string>()
   const [legalMoves, setLegalMoves] = useState<string[]>([])
   const [legalCells, setLegalCells] = useState<number[]>([])
+  const [checkersLegalMoves, setCheckersLegalMoves] = useState<CheckersAction[]>([])
   const [pendingCell, setPendingCell] = useState<number>()
   const [movePending, setMovePending] = useState(false)
   const [startPending, setStartPending] = useState(false)
@@ -196,6 +208,7 @@ export function App() {
     saveRoomLocation(room)
     setLegalMoves([])
     setLegalCells([])
+    setCheckersLegalMoves([])
     setPendingCell(undefined)
     setMovePending(false)
     setConnected(false)
@@ -265,6 +278,18 @@ export function App() {
           } : current)
           setPendingCell(undefined)
           setMovePending(false)
+        } else if (event.type === "checkers.move.made") {
+          setSnapshot(current => current?.game?.gameType === "checkers" ? {
+            ...current,
+            game: {
+              ...current.game,
+              board: event.board,
+              moves: [...current.game.moves, event.move],
+              turn: event.turn,
+              ply: event.ply
+            }
+          } : current)
+          setMovePending(false)
         } else if (event.type === "move.made" || event.type === "game.finished") {
           setPendingCell(undefined)
           setMovePending(false)
@@ -280,6 +305,10 @@ export function App() {
           setLegalMoves(event.legalMoves)
         } else if (event.type === "tic-tac-toe.turn.started") {
           setLegalCells(event.legalCells)
+        } else if (event.type === "checkers.turn.started") {
+          setCheckersLegalMoves(event.legalMoves)
+        } else if (event.type === "checkers.started") {
+          setCheckersLegalMoves([])
         } else if (
           event.type === "error"
           && resumeTokenUsed
@@ -410,6 +439,7 @@ export function App() {
     setParticipantId(undefined)
     setLegalMoves([])
     setLegalCells([])
+    setCheckersLegalMoves([])
     setPendingCell(undefined)
     setMovePending(false)
     setConnected(false)
@@ -444,6 +474,7 @@ export function App() {
             <select value={form.gameType} onChange={event => setForm({ ...form, gameType: event.target.value as GameType })}>
               <option value="chess">Xadrez</option>
               <option value="tic-tac-toe">Jogo da velha</option>
+              <option value="checkers">Damas</option>
             </select>
           </label>
           <label className="spaced-field">
@@ -488,6 +519,7 @@ export function App() {
     : undefined
   const chessGame = snapshot?.game?.gameType === "chess" ? snapshot.game : undefined
   const ticGame = snapshot?.game?.gameType === "tic-tac-toe" ? snapshot.game : undefined
+  const checkersGame = snapshot?.game?.gameType === "checkers" ? snapshot.game : undefined
   const ticBoard = ticGame?.board ?? Array<Color | null>(9).fill(null)
   const displayedTicBoard = pendingCell !== undefined && mine?.color && ticBoard[pendingCell] === null
     ? ticBoard.map((color, index) => index === pendingCell ? mine.color : color)
@@ -497,6 +529,8 @@ export function App() {
     : undefined
   const moves = chessGame?.moves ?? []
   const ticTacToe = snapshot?.session.gameType === "tic-tac-toe"
+  const checkers = snapshot?.session.gameType === "checkers"
+  const hasRoundScores = ticTacToe || checkers
   const results = snapshot?.session.results ?? []
   const whiteWins = results.filter(result => result.winner === "white").length
   const blackWins = results.filter(result => result.winner === "black").length
@@ -509,7 +543,7 @@ export function App() {
           <h1>{room.sessionId}</h1>
         </div>
         <div className="topbar-actions">
-          <AppearanceControl appearance={appearance} onChange={updateAppearance} ticTacToe={ticTacToe} />
+          <AppearanceControl appearance={appearance} onChange={updateAppearance} gameType={snapshot?.session.gameType ?? "chess"} />
           <span className={connected ? "connection online" : "connection"}>{connected ? "Conectado" : "Reconectando"}</span>
           <button className="text-button" onClick={leaveRoom}>Sair</button>
         </div>
@@ -521,8 +555,8 @@ export function App() {
           <PlayerCard
             label={ticTacToe ? "O" : "PRETAS"}
             player={snapshot?.session.black ?? null}
-            captures={ticTacToe ? [] : capturedPieces(moves, "black")}
-            showCaptures={!ticTacToe}
+            captures={chessGame ? capturedPieces(moves, "black") : []}
+            showCaptures={Boolean(chessGame)}
             pieceSet={appearance.pieces}
             progress={snapshot?.game?.progress.filter(item => item.color === "black") ?? []}
           />
@@ -530,8 +564,8 @@ export function App() {
           <PlayerCard
             label={ticTacToe ? "X" : "BRANCAS"}
             player={snapshot?.session.white ?? null}
-            captures={ticTacToe ? [] : capturedPieces(moves, "white")}
-            showCaptures={!ticTacToe}
+            captures={chessGame ? capturedPieces(moves, "white") : []}
+            showCaptures={Boolean(chessGame)}
             pieceSet={appearance.pieces}
             progress={snapshot?.game?.progress.filter(item => item.color === "white") ?? []}
           />
@@ -547,18 +581,18 @@ export function App() {
           )}
         </aside>
 
-        <section className={`board-panel ${ticTacToe ? `theme-${appearance.theme}` : ""}`}>
+        <section className={`board-panel ${hasRoundScores ? `theme-${appearance.theme}` : ""}`}>
           <GameStatus snapshot={snapshot} mine={mine} error={error} legalMoves={legalMoves} />
           {ticTacToe && <div className="tic-seats" aria-label="Peças dos jogadores">
             <span><b>X</b> {snapshot?.session.white?.name ?? "Aguardando jogador"}</span>
             <span><b>O</b> {snapshot?.session.black?.name ?? "Aguardando jogador"}</span>
           </div>}
-          {ticTacToe && <div className="tic-score" aria-label="Placar da sala">
-            <span><b>X</b> {whiteWins}</span>
+          {hasRoundScores && <div className="tic-score" aria-label="Placar da sala">
+            <span><b>{ticTacToe ? "X" : "Brancas"}</b> {whiteWins}</span>
             <span>Empates {draws}</span>
-            <span><b>O</b> {blackWins}</span>
+            <span><b>{ticTacToe ? "O" : "Pretas"}</b> {blackWins}</span>
           </div>}
-          {ticTacToe && mine && results.length > 0 && <p className="tic-personal-score">
+          {hasRoundScores && mine && results.length > 0 && <p className="tic-personal-score">
             Você: {resultCount(mine.color === "white" ? whiteWins : blackWins, "vitória", "vitórias")} · {resultCount(mine.color === "white" ? blackWins : whiteWins, "derrota", "derrotas")} · {resultCount(draws, "empate", "empates")}
           </p>}
           {ticTacToe ? <TicTacToeBoard
@@ -579,6 +613,32 @@ export function App() {
                 requestId,
                 expectedPly: snapshot.game.ply,
                 cell
+              }))
+            }}
+          /> : checkers ? <CheckersBoard
+            key={`${checkersGame?.id ?? "waiting"}:${checkersGame?.ply ?? 0}:${connected && !movePending && mine?.color === checkersGame?.turn}`}
+            board={checkersGame?.board ?? Array<CheckersPiece | null>(64).fill(null)}
+            orientation={mine?.color ?? "white"}
+            theme={appearance.theme}
+            pieceSet={appearance.pieces}
+            enabled={Boolean(connected && !movePending && mine && checkersGame?.status === "playing" && checkersGame.turn === mine.color)}
+            legalMoves={checkersLegalMoves}
+            lastMove={checkersGame?.moves.at(-1)}
+            onMove={(from, path) => {
+              if (!checkersGame) return
+              const socket = socketRef.current
+              if (!socket || socket.readyState !== WebSocket.OPEN) {
+                setError("Conexão perdida. Aguarde a reconexão para jogar.")
+                return
+              }
+              setError("")
+              setMovePending(true)
+              socket.send(JSON.stringify({
+                type: "checkers.play",
+                requestId: newRequestId(),
+                expectedPly: checkersGame.ply,
+                from,
+                path
               }))
             }}
           /> : <ChessBoard
@@ -613,13 +673,13 @@ export function App() {
               {startPending ? "Iniciando…" : "Nova partida"}
             </button>
           )}
-          {ticTacToe && results.length > 0 && <section className="tic-match-history" aria-label="Histórico de partidas">
+          {hasRoundScores && results.length > 0 && <section className="tic-match-history" aria-label="Histórico de partidas">
             <h2>Histórico de partidas</h2>
             <ol>
               {results.map((result, index) => ({ result, round: index + 1 })).reverse().map(({ result, round }) => (
                 <li key={round}>
                   <span>Partida {round}</span>
-                  <b>{result.winner === "white" ? "X venceu" : result.winner === "black" ? "O venceu" : "Empate"}</b>
+                  <b>{result.winner === "white" ? ticTacToe ? "X venceu" : "Brancas venceram" : result.winner === "black" ? ticTacToe ? "O venceu" : "Pretas venceram" : "Empate"}</b>
                   <small>{finishReasonLabel(result.reason)}</small>
                 </li>
               ))}
@@ -628,12 +688,14 @@ export function App() {
         </section>
 
         <aside className="history-panel">
-          <p className="eyebrow">{ticTacToe ? "JOGADAS DA PARTIDA" : "HISTÓRICO"}</p>
+          <p className="eyebrow">{hasRoundScores ? "JOGADAS DA PARTIDA" : "HISTÓRICO"}</p>
           {ticTacToe
             ? <ol className="tic-history">{ticGame?.moves.map((move, index) => (
               <li key={index}>{index + 1}. {move.color === "white" ? "X" : "O"} · {move.cell + 1}{move.commentary && <small>{move.commentary}</small>}</li>
             ))}</ol>
-            : <MoveHistory moves={moves} />}
+            : checkers ? <ol className="tic-history">{checkersGame?.moves.map((move, index) => (
+              <li key={index}>{index + 1}. {move.color === "white" ? "Brancas" : "Pretas"} · {checkersMoveLabel(move.from, move.path, move.captures.length > 0)}{move.promoted ? " ♛" : ""}{move.commentary && <small>{move.commentary}</small>}</li>
+            ))}</ol> : <MoveHistory moves={moves} />}
         </aside>
       </section>
     </main>
@@ -709,6 +771,7 @@ function InviteHelp({ sessionId, gameType }: { sessionId: string; gameType: stri
       <code>{commandPrefix} random {sessionId}</code>
       <p className="help-note">Use <b>--seat white</b> ou <b>--seat black</b> somente quando quiser exigir uma cor.</p></>}
       {gameType === "tic-tac-toe" && <p>Agentes podem entrar pelo servidor MCP e jogar com <b>play_cell</b>.</p>}
+      {gameType === "checkers" && <p>Agentes podem entrar pelo servidor MCP e jogar com <b>play_checkers</b>. Em capturas múltiplas, informe toda a sequência de casas.</p>}
     </details>
   )
 }
@@ -745,11 +808,11 @@ const ticMarks: Record<PieceSet, { white: string; black: string }> = {
 function AppearanceControl({
   appearance,
   onChange,
-  ticTacToe
+  gameType
 }: {
   appearance: BoardAppearance
   onChange: (appearance: BoardAppearance) => void
-  ticTacToe: boolean
+  gameType: GameType
 }) {
   return (
     <details className="appearance-control">
@@ -770,7 +833,7 @@ function AppearanceControl({
             </button>
           ))}
         </div>
-        <p className="eyebrow piece-heading">{ticTacToe ? "ESTILO DAS PEÇAS" : "PEÇAS"}</p>
+        <p className="eyebrow piece-heading">{gameType === "chess" ? "PEÇAS" : "ESTILO DAS PEÇAS"}</p>
         <div className="appearance-options piece-options">
           {pieceSets.map(pieces => (
             <button
@@ -780,10 +843,12 @@ function AppearanceControl({
               aria-pressed={appearance.pieces === pieces}
               onClick={() => onChange({ ...appearance, pieces })}
             >
-              {ticTacToe
+              {gameType === "tic-tac-toe"
                 ? <span className="tic-piece-preview" aria-hidden="true"><b>{ticMarks[pieces].white}</b><b>{ticMarks[pieces].black}</b></span>
-                : <span className="piece-preview" aria-hidden="true">{pieceSymbol("N", pieces)}</span>}
-              <small>{ticTacToe ? ticPieceSetLabels[pieces] : pieceSetLabels[pieces]}</small>
+                : gameType === "checkers"
+                  ? <span className={`checkers-piece-preview piece-set-${pieces}`} aria-hidden="true"><span className="white" /><span className="black" /></span>
+                  : <span className="piece-preview" aria-hidden="true">{pieceSymbol("N", pieces)}</span>}
+              <small>{gameType === "chess" ? pieceSetLabels[pieces] : ticPieceSetLabels[pieces]}</small>
             </button>
           ))}
         </div>
@@ -929,7 +994,9 @@ function finishReasonLabel(reason: string): string {
     resignation: "desistência",
     "turn-timeout": "tempo esgotado",
     "move-limit": "limite de jogadas",
-    "three-in-a-row": "três em linha"
+    "three-in-a-row": "três em linha",
+    "no-legal-moves": "sem jogadas disponíveis",
+    "no-progress": "sem progresso"
   } as Record<string, string>)[reason] ?? reason
 }
 
