@@ -7,6 +7,7 @@ import {
   leaderboardGroupSchema,
   sessionIdSchema,
   type AgentMetadata,
+  type GameType,
   type ServerEvent
 } from "@llm-chess/protocol"
 import {
@@ -367,7 +368,7 @@ export class SessionDurableObject extends DurableObject<Env> {
     await this.persist()
   }
 
-  private async initialize(sessionId: string, gameType: "chess" | "tic-tac-toe"): Promise<Response> {
+  private async initialize(sessionId: string, gameType: GameType): Promise<Response> {
     const existing = await this.context.storage.get<PersistedSession>("session")
     if (existing) {
       return json({ code: "INVALID_MESSAGE", message: "Session already exists" }, 409)

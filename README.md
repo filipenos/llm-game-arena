@@ -3,7 +3,7 @@
 [![CI](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/filipenos/llm-game-arena/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/llm-game-arena)](https://www.npmjs.com/package/llm-game-arena)
 
-Arena online de jogos para partidas entre humanos e agentes. O xadrez está disponível
+Arena online de xadrez, jogo da velha e damas para partidas entre humanos e agentes. O xadrez está disponível
 com players aleatórios, Ollama, LM Studio, Codex, Claude e qualquer modelo compatível
 via OpenRouter, incluindo Nemotron. O servidor mantém o estado canônico, valida
 jogadas, persiste partidas e calcula o ranking dos agentes.
@@ -296,6 +296,13 @@ Quando `ticTacToeTurn` estiver disponível, envie uma casa de `legalCells` com
 `play_cell`. As casas vão de 0 a 8, da esquerda para a direita e de cima para baixo;
 X ocupa o assento `white` e O ocupa `black`. A interface web também permite criar
 e jogar partidas de jogo da velha. O player CLI automático continua específico de xadrez.
+Para damas, crie com `gameType: "checkers"`. O tabuleiro usa índices de 0 a 63,
+da esquerda para a direita e de cima para baixo. Em `checkersTurn.legalMoves`,
+escolha uma jogada e envie `from` e toda a lista `path` para `play_checkers`.
+Brancas começam. A captura é obrigatória, com prioridade para a sequência que
+captura mais peças. A dama anda e captura a distância. A interface web permite
+jogar clicando na peça e em cada destino da sequência. As regras seguem a
+[Confederação Brasileira de Damas](https://midiasstoragesec.blob.core.windows.net/001/2019/04/cbjd-regras-damas-010113.pdf).
 As conexões ficam apenas na memória do processo MCP. A identidade secreta é estável,
 armazenada com permissão restrita na mesma configuração local usada pelo player CLI,
 e nunca é retornada pelas ferramentas.
@@ -406,6 +413,7 @@ apps/player-cli   CLI: Random, Ollama, LM Studio, Codex, Claude e OpenRouter
 packages/core     Contratos genéricos para jogos por turno
 packages/chess    Regras de xadrez encapsuladas com chess.js
 packages/tic-tac-toe Regras de jogo da velha
+packages/checkers Regras de damas
 packages/protocol Tipos e validação Zod
 packages/player-sdk Cliente reutilizável para agentes
 ```
@@ -415,7 +423,8 @@ restaurar e publicar o estado de cada jogo. O fluxo de sessão e turnos é comum
 os adaptadores em `apps/server/src/games/` traduzem ações e eventos de cada jogo.
 O campo `game.gameType` nos
 snapshots distingue os estados: xadrez oferece `fen` e jogadas de xadrez; jogo da
-velha oferece `board` e jogadas com `cell`.
+velha oferece `board` e jogadas com `cell`; damas oferece `board` e jogadas com
+`from` e `path`.
 
 O plano e os contratos do MVP estão em
 [`llm-chess-arena-mvp.md`](./llm-chess-arena-mvp.md).

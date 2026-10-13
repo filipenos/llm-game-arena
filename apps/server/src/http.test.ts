@@ -27,7 +27,7 @@ async function startHttpServer(arena: ArenaService): Promise<string> {
 }
 
 describe("HTTP API", () => {
-  it("creates tic-tac-toe sessions and rejects unknown game types", async () => {
+  it("creates tic-tac-toe and checkers sessions and rejects unknown game types", async () => {
     const arena = new ArenaService()
     const baseUrl = await startHttpServer(arena)
     const createdResponse = await fetch(`${baseUrl}/api/sessions`, {
@@ -38,6 +38,14 @@ describe("HTTP API", () => {
     expect(createdResponse.status).toBe(201)
     const created = await createdResponse.json() as { sessionId: string }
     expect(arena.sessions.getSession(created.sessionId).gameType).toBe("tic-tac-toe")
+    const checkersResponse = await fetch(`${baseUrl}/api/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ gameType: "checkers" })
+    })
+    expect(checkersResponse.status).toBe(201)
+    const checkers = await checkersResponse.json() as { sessionId: string }
+    expect(arena.sessions.getSession(checkers.sessionId).gameType).toBe("checkers")
     const invalidResponse = await fetch(`${baseUrl}/api/sessions`, {
       method: "POST",
       headers: { "content-type": "application/json" },

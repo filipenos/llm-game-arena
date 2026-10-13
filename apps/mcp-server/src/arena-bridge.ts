@@ -9,6 +9,7 @@ import {
   sessionIdSchema,
   type AgentMetadata,
   type Color,
+  type CheckersCommand,
   type MoveCommand,
   type GameType,
   type ServerEvent,
@@ -20,6 +21,7 @@ interface ArenaPlayer {
   connect(): Promise<void>
   playMove(command: MoveCommand, expectedPly: number): void
   playCell?(cell: number, expectedPly: number): void
+  playCheckers?(command: CheckersCommand, expectedPly: number): void
   resign(): void
   close(): void
 }
@@ -32,6 +34,7 @@ interface ConnectionState {
   snapshot?: SessionSnapshot
   turn?: TurnContext
   ticTurn?: Extract<ServerEvent, { type: "tic-tac-toe.turn.started" }>
+  checkersTurn?: Extract<ServerEvent, { type: "checkers.turn.started" }>
   movePending: boolean
   lastError?: { code: string; message: string }
 }
@@ -202,6 +205,21 @@ export class ArenaBridge {
     return { submitted: cell, expectedPly: state.ticTurn.ply }
   }
 
+  playCheckers(sessionId: string, command: CheckersCommand, server?: string): unknown {
+    const state = this.connection(sessionId, server)
+    if (!state.checkersTurn) throw new Error("It is not this player's checkers turn")
+    if (state.movePending) throw new Error("A move is already pending confirmation")
+    const legal = state.checkersTurn.legalMoves.some(move => move.from === command.from
+      && move.path.length === command.path.length
+      && move.path.every((square, index) => square === command.path[index]))
+    if (!legal) throw new Error("Illegal checkers move. Choose a full path from checkersTurn.legalMoves")
+    if (!state.client.playCheckers) throw new Error("This player client cannot play checkers")
+    state.movePending = true
+    state.lastError = undefined
+    state.client.playCheckers(command, state.checkersTurn.ply)
+    return { submitted: command, expectedPly: state.checkersTurn.ply }
+  }
+
   resignGame(sessionId: string, server?: string): unknown {
     const state = this.connection(sessionId, server)
     state.client.resign()
@@ -233,9 +251,15 @@ export class ArenaBridge {
       state.movePending = false
       state.lastError = undefined
     }
-    if (event.type === "move.made" || event.type === "tic-tac-toe.move.made" || event.type === "game.finished") {
+    if (event.type === "checkers.turn.started") {
+      state.checkersTurn = event
+      state.movePending = false
+      state.lastError = undefined
+    }
+    if (event.type === "move.made" || event.type === "tic-tac-toe.move.made" || event.type === "checkers.move.made" || event.type === "game.finished") {
       state.turn = undefined
       state.ticTurn = undefined
+      state.checkersTurn = undefined
       state.movePending = false
     }
     if (event.type === "move.invalid" || event.type === "error") {
@@ -253,6 +277,7 @@ export class ArenaBridge {
       movePending: state.movePending,
       turn: state.turn ?? null,
       ticTacToeTurn: state.ticTurn ?? null,
+      checkersTurn: state.checkersTurn ?? null,
       lastError: state.lastError ?? null,
       snapshot: state.snapshot ?? null
     }
