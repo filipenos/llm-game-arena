@@ -27,7 +27,7 @@
     "url": "git+https://github.com/filipenos/llm-game-arena.git",
     "directory": "apps/player-cli"
   },
-  "homepage": "https://chess.filipenos.com",
+  "homepage": "https://games.filipenos.com",
   "bugs": "https://github.com/filipenos/llm-game-arena/issues",
   "engines": {
     "node": ">=22"

@@ -13,5 +13,5 @@ const server = createServer(createHttpApp(arena))
 attachWebSocket(server, arena)
 
 server.listen(port, host, () => {
-  process.stdout.write(`LLM Chess Arena server listening on http://${host}:${port}\n`)
+  process.stdout.write(`LLM Game Arena server listening on http://${host}:${port}\n`)
 })

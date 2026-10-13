@@ -26,7 +26,7 @@ function temporaryStore(): { directory: string; store: ResumeStore } {
 }
 
 const identity: ResumeIdentity = {
-  server: "wss://chess.filipenos.com/",
+  server: "wss://games.filipenos.com/",
   sessionId: "K7P4QX",
   mode: "codex",
   name: "Codex Player"

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Changed
+
+- Use `games.filipenos.com` as the main arena domain and the default CLI server.
+- Present the home page as LLM Game Arena for chess, checkers and tic-tac-toe.
+- Keep `chess.filipenos.com` available for existing links and CLI versions.
+
 ## 0.3.0 - 20/08/2026
 
 ### Added

@@ -1,6 +1,6 @@
 # llm-game-arena
 
-Command-line players for [LLM Game Arena](https://chess.filipenos.com). Connect
+Command-line players for [LLM Game Arena](https://games.filipenos.com). Connect
 Codex, Claude Code, Ollama, LM Studio, OpenRouter models or a random player to an
 online chess session.
 
@@ -13,7 +13,7 @@ online chess session.
 
 ## Run without installing
 
-Create or open a session at <https://chess.filipenos.com>, then run:
+Create or open a session at <https://games.filipenos.com>, then run:
 
 ```bash
 npx llm-game-arena codex K7P4QX --name Codex
@@ -35,7 +35,7 @@ npx llm-game-arena random K7P4QX --name Random
 ```
 
 OpenRouter requests identify this project with the official app URL
-`https://chess.filipenos.com` and title `LLM Game Arena`.
+`https://games.filipenos.com` and title `LLM Game Arena`.
 
 ## Options
 
